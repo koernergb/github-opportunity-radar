@@ -1,0 +1,45 @@
+[project]
+name = "github-opportunity-radar"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.13",
+  "httpx>=0.27",
+  "jinja2>=3.1",
+  "openai>=1.0",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.3",
+  "pyyaml>=6.0",
+  "rich>=13.7",
+  "sqlalchemy>=2.0",
+  "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+  "freezegun>=1.5",
+  "mypy>=1.10",
+  "pytest>=8.2",
+  "pytest-asyncio>=0.23",
+  "pytest-cov>=5.0",
+  "respx>=0.21",
+  "ruff>=0.5",
+]
+
+[project.scripts]
+radar = "radar.cli:app"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

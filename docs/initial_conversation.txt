@@ -1,0 +1,551 @@
+ChatGPT
+
+
+
+
+Yesterday 5:51 PM
+How would i build a bot that monitors github repos i choose for new issues/issues that have a high payoff to effort ratio and are likely to actually get prs merged
+
+You could build this as a personal open-source opportunity radar. The most valuable part is not detecting new issues; it is learning which issues are:
+
+valuable for your career,
+
+realistically solvable by you,
+
+welcomed by maintainers, and
+
+likely to result in a merged PR.
+
+The MVP
+Start with a scheduled Python service rather than a full GitHub App:
+
+GitHub API
+    ↓
+Issue collector
+    ↓
+Hard filters
+    ↓
+Repository-health analysis
+    ↓
+LLM issue analysis
+    ↓
+Opportunity score
+    ↓
+SQLite/Postgres
+    ↓
+Daily Discord/Slack/email digest
+Run it every 30–60 minutes using GitHub Actions, a cheap Railway/Fly.io service, or a local cron job. GitHub Actions supports scheduled workflows, while GitHub’s GraphQL API lets you retrieve exactly the issue, repository, and PR fields you need. 
+
+For repositories you do not control, polling is simpler than webhooks. Repository webhooks require permission to configure the repository, whereas a GitHub App can receive events only where it has been installed. 
+
+1. Configure repositories and your preferences
+Use a YAML file:
+
+repositories:
+  - ml-explore/mlx
+  - ml-explore/mlx-lm
+  - pytorch/pytorch
+  - huggingface/transformers
+
+profile:
+  languages:
+    python: 1.0
+    cpp: 0.65
+    swift: 0.35
+
+  interests:
+    - inference
+    - quantization
+    - gpu kernels
+    - mechanistic interpretability
+    - apple silicon
+    - distributed systems
+
+  avoid:
+    - frontend
+    - windows-only
+    - dependency upgrades
+    - major refactors
+
+  max_estimated_hours: 16
+Eventually, add separate objectives:
+
+objectives:
+  career_value: 0.35
+  merge_probability: 0.30
+  learning_value: 0.20
+  low_effort: 0.15
+For your situation, I would weight career signal and merge probability more heavily than raw ease. A two-hour typo fix has an excellent payoff-to-effort ratio mathematically but almost no career payoff.
+
+2. Fetch candidate issues
+Use GitHub’s issue search API or GraphQL search query. GitHub now supports more advanced issue searches through both REST and GraphQL. 
+
+A starting search:
+
+repo:ml-explore/mlx
+is:issue
+is:open
+no:assignee
+-label:wontfix
+-label:duplicate
+-label:question
+Do not limit yourself to good first issue. GitHub uses that label to surface contribution opportunities, but labeling practices differ substantially among repositories. 
+
+In fact, recent research found declining availability and merge rates for newcomer good first issue PRs, so the label should be one feature—not the entire strategy. 
+
+Fetch these fields:
+
+{
+    "repo",
+    "issue_number",
+    "title",
+    "body",
+    "labels",
+    "author",
+    "created_at",
+    "updated_at",
+    "comments",
+    "reactions",
+    "assignees",
+    "linked_pull_requests",
+    "milestone",
+}
+Also fetch repository-level statistics:
+
+{
+    "stars",
+    "default_branch",
+    "primary_language",
+    "recent_commit_count",
+    "open_issue_count",
+    "merged_pr_count_90d",
+    "median_pr_merge_time",
+    "outside_contributor_merge_rate",
+}
+3. Apply cheap filters before using an LLM
+Discard issues that are:
+
+already assigned,
+
+linked to an open PR,
+
+marked stale, blocked, duplicate, invalid, or needs-design,
+
+older than a configurable limit with no recent maintainer activity,
+
+in a language or platform you do not want,
+
+clearly asking for a large architectural redesign,
+
+already claimed in comments.
+
+You should also detect soft claims:
+
+CLAIM_PATTERNS = [
+    r"\bI(?:'ll| will| can) work on this\b",
+    r"\bcan you assign (?:this|it) to me\b",
+    r"\bworking on (?:this|it)\b",
+    r"\bI have a PR\b",
+]
+This matters because many repositories do not formally assign outside contributors.
+
+4. Estimate effort
+Have an LLM return structured JSON:
+
+{
+  "task_type": "performance optimization",
+  "required_skills": ["Python", "MLX", "benchmarking"],
+  "likely_files_touched": 3,
+  "estimated_hours_low": 4,
+  "estimated_hours_high": 10,
+  "ambiguity": 0.25,
+  "requires_maintainer_design_decision": false,
+  "requires_special_hardware": true,
+  "test_plan_clarity": 0.8,
+  "reasoning": "The issue identifies a specific slow path and includes a benchmark."
+}
+Ask it specifically to look for effort multipliers:
+
+reproduction is unclear,
+
+expected behavior is disputed,
+
+no obvious test exists,
+
+cross-platform implications,
+
+native/CUDA/Metal code required,
+
+API compatibility concerns,
+
+multiple packages must change,
+
+benchmark infrastructure is missing,
+
+issue is actually a research problem.
+
+An issue that says “implement PagedAttention” may sound exciting but could be a multi-month architectural project. An issue saying “reduce a specific allocation in the KV-cache update path, benchmark attached” might be ideal.
+
+5. Estimate payoff
+Career payoff is distinct from project priority.
+
+For you, useful payoff signals might be:
+
++ core inference path
++ kernels, serving, quantization, profiling
++ meaningful benchmark improvement
++ visible repository
++ technically legible PR
++ work maintainers can point to
++ issue relevant to target jobs
++ opportunity to interact with respected maintainers
+
+- generated docs
+- dependency bumps
+- tiny cleanup
+- repository with little adoption
+- change hidden in application glue
+A simple career-payoff model:
+
+career_payoff = (
+    0.25 * repo_relevance
+    + 0.20 * technical_depth
+    + 0.20 * user_impact
+    + 0.15 * visibility
+    + 0.10 * learning_value
+    + 0.10 * portfolio_explainability
+)
+“Portfolio explainability” is important. A strong issue lets you later say:
+
+I profiled MLX-LM’s decode path, identified repeated buffer allocation, changed its cache-management logic, and improved token throughput by 12%.
+
+That is more useful than merely having your name in a popular repository.
+
+6. Estimate merge probability
+This is where the bot becomes much better than a generic issue finder.
+
+Repository-level signals
+Calculate from historical PRs:
+
+percentage of outside-contributor PRs merged,
+
+median time to first maintainer response,
+
+median time to merge,
+
+percentage closed without merge,
+
+number of active maintainers,
+
+recent commits,
+
+whether CONTRIBUTING.md exists,
+
+whether tests run for forks,
+
+whether maintainers regularly label contribution-ready issues.
+
+GitHub provides REST endpoints for retrieving pull requests and issue activity, allowing you to construct these historical features. 
+
+Issue-level positive signals
++ maintainer created the issue
++ maintainer explicitly invited a PR
++ acceptance criteria are stated
++ expected files or implementation direction are mentioned
++ bug reproduction exists
++ tests or benchmark requirements are described
++ issue has priority/help-wanted labels
++ maintainer responded recently
++ similar PRs were previously merged
+Negative signals
+- issue opened by user with no maintainer response
+- maintainers debate whether behavior is a bug
+- no consensus on API design
+- maintainer says “needs proposal” or “needs RFC”
+- linked abandoned PRs
+- issue has remained untouched for years
+- project seldom merges external PRs
+- scope touches public APIs or architecture
+- maintainers are already implementing it internally
+Your first heuristic model can be explicit:
+
+merge_probability = sigmoid(
+      1.2 * maintainer_requested_pr
+    + 0.9 * acceptance_criteria_present
+    + 0.8 * recent_maintainer_comment
+    + 0.7 * repo_external_merge_rate
+    + 0.5 * tests_are_obvious
+    - 1.3 * design_unresolved
+    - 1.0 * issue_claimed
+    - 0.8 * stale_without_activity
+    - 0.7 * public_api_change
+)
+Later, train a lightweight model using historical examples from each repository.
+
+7. Rank payoff against effort
+Do not literally use only payoff / hours, because that over-rewards trivial issues. Use diminishing returns and explicit risk penalties:
+
+score = (
+    100
+    * career_payoff
+    * merge_probability
+    * confidence
+    / ((estimated_hours + 2) ** 0.65)
+)
+Then subtract penalties:
+
+score -= 15 * ambiguity
+score -= 12 * design_dependency
+score -= 10 * claim_probability
+score -= 8 * environment_difficulty
+A fuller version:
+
+def opportunity_score(issue):
+    value = (
+        0.35 * issue.career_payoff
+        + 0.20 * issue.learning_value
+        + 0.20 * issue.project_priority
+        + 0.15 * issue.personal_fit
+        + 0.10 * issue.visibility
+    )
+
+    success = (
+        issue.merge_probability
+        * issue.completion_probability
+    )
+
+    cost = (issue.estimated_hours + 2) ** 0.65
+
+    risk = (
+        0.30 * issue.ambiguity
+        + 0.25 * issue.design_dependency
+        + 0.25 * issue.claim_probability
+        + 0.20 * issue.environment_difficulty
+    )
+
+    return 100 * value * success / cost - 25 * risk
+The conceptual target is:
+
+Expected contribution value
+───────────────────────────
+ Expected time and friction
+But the nonlinear denominator prevents one-line changes from dominating everything.
+
+8. Generate a useful report
+Each notification should say more than “new issue found.”
+
+🔥 87/100 — MLX-LM #1842
+Avoid repeated KV-cache allocation during decode
+
+Why it ranks highly
+• Maintainer-created and explicitly open to a PR
+• Specific benchmark and expected behavior supplied
+• Likely 3–8 hours
+• Core inference-path work
+• Repository merges 68% of comparable external PRs
+• Closely matches your MLX/inference interests
+
+Main risks
+• Requires Apple Silicon benchmark comparisons
+• One related PR was closed six months ago
+
+Suggested first move
+Reproduce the benchmark, inspect cache.py and generation.py,
+then comment with the before/after profile before implementing.
+
+Estimated merge probability: 72%
+Career payoff: 9/10
+Effort: 5.5 hours
+Send only the top three to five opportunities each day. A flood of 40 “promising” issues makes the system useless.
+
+9. Have it recommend the pre-PR approach
+Often the highest-leverage action is not immediately writing code. The bot should suggest whether to:
+
+claim the issue,
+
+ask one scope question,
+
+post a reproduction,
+
+provide a benchmark,
+
+submit a design sketch,
+
+create a minimal failing test,
+
+simply open the PR without discussion.
+
+For higher-risk issues, draft a comment:
+
+I reproduced this on an M3 Max and saw the same allocation pattern.
+I believe the change can be isolated to `KVCache.update()` without
+changing the public API. I’m planning to add a decode benchmark and
+a regression test. Would that scope be welcome?
+That small interaction can substantially increase the chance you avoid doing unwanted work.
+
+Suggested stack
+For the fastest serious implementation:
+
+Python 3.12
+PyGithub or direct httpx calls
+GitHub GraphQL API
+Pydantic
+SQLite initially, Postgres later
+SQLModel or SQLAlchemy
+OpenAI structured output or a local model
+GitHub Actions cron
+Discord webhook or email digest
+Typer CLI
+Repository structure:
+
+github-opportunity-radar/
+├── config/
+│   └── profile.yaml
+├── src/
+│   └── radar/
+│       ├── github_client.py
+│       ├── collector.py
+│       ├── filters.py
+│       ├── repo_metrics.py
+│       ├── issue_analyzer.py
+│       ├── scoring.py
+│       ├── notifications.py
+│       ├── models.py
+│       └── cli.py
+├── prompts/
+│   ├── estimate_effort.md
+│   └── evaluate_opportunity.md
+├── tests/
+├── data/
+│   └── radar.sqlite
+├── .github/workflows/scan.yml
+└── pyproject.toml
+Build sequence
+Phase 1: useful in a weekend
+Read a YAML list of repositories.
+
+Poll open issues updated since the previous run.
+
+Exclude assigned, claimed, stale, and linked-PR issues.
+
+Ask an LLM for effort, fit, ambiguity, and payoff.
+
+Rank them.
+
+Send a daily digest.
+
+Record which recommendations you accepted or rejected.
+
+Phase 2: make merge prediction credible
+Download the last 100–500 closed PRs per repository.
+
+Identify external contributors.
+
+Calculate response and merge statistics.
+
+Match PRs to issues.
+
+Extract features from successful and unsuccessful contributions.
+
+Add repository-specific merge likelihood.
+
+Phase 3: personalized learning
+Add feedback buttons:
+
+[Interested] [Too hard] [Low value] [Already claimed] [Bad repo]
+Also track outcomes:
+
+recommended → investigated → commented → started → PR opened → merged
+Once you have perhaps 50–100 decisions, train a small ranking model such as LightGBM or logistic regression. The LLM should extract semantic features; the learned ranker should personalize the final ordering.
+
+The most differentiated version
+The strongest version would not merely monitor issues. It would compare each issue against:
+
+the repository’s historical contribution patterns,
+
+your GitHub history,
+
+your resume goals,
+
+files and APIs you have previously worked with,
+
+issues currently receiving maintainer attention,
+
+similar past PRs and why they merged or failed.
+
+That becomes an open-source career agent, not another good first issue scraper. Existing research has already shown that skills can be inferred from the APIs and domains implicated by an issue; your advantage would be combining that with effort, career payoff, and repository-specific acceptance behavior. 
+
+For your goals, I would initially point it at perhaps 10–15 carefully chosen MLX, PyTorch, inference, and interpretability repositories, rather than scanning all of GitHub. Quality of repository selection will matter more than sophistication of the first scoring model.
+
+
+Give task cards cursor or codex can read. Give me everything an agent would need to fully code out the project. Take your time
+
+Worked for 11s
+I created a repository-ready implementation pack for Cursor or Codex.
+
+Downloads
+Download the complete agent pack
+
+Individual core files:
+
+AGENTS.md
+
+AGENT_SPEC.md
+
+TASKS.md
+
+profile.example.yaml
+
+issue_analysis_system.md
+
+Project configuration
+
+The pack contains:
+
+18 sequenced MVP task cards and 5 optional phase-two cards
+
+complete architecture and module structure
+
+normalized SQL database design
+
+incremental GitHub ingestion algorithm
+
+retry, pagination, ETag, and rate-limit behavior
+
+maintainer and external-contributor classification
+
+linked-PR and soft-claim detection
+
+repository health metrics
+
+Bayesian merge-rate shrinkage
+
+strict LLM analysis schema and prompt-safety rules
+
+deterministic scoring formulas
+
+confidence and explainability requirements
+
+CLI contract
+
+feedback lifecycle
+
+unit, integration, and golden-fixture test plans
+
+GitHub Actions CI and scheduled-run scaffolding
+
+starter Python package
+
+The API design deliberately tracks REST search and GraphQL limits separately because GitHub maintains distinct rate-limit categories for them. 
+ The scheduled workflow also documents that GitHub Actions cron schedules run in UTC and that scheduled workflows in inactive public repositories may be disabled after 60 days. 
+
+Give the extracted repository to the coding agent with:
+
+Read AGENTS.md and docs/AGENT_SPEC.md completely. Then execute TASKS.md
+one card at a time in dependency order. For each card, restate its acceptance
+criteria, implement it, add the required tests, and run Ruff, mypy, and pytest
+before marking it complete. Do not skip cards or weaken acceptance criteria.
+I would have the agent stop after Card 06 for a first review. At that point, the hardest foundational pieces—configuration, persistence, resilient GitHub access, repository sync, and incremental issue collection—should be working before it begins the more subjective ranking logic. 
+
+
+

@@ -1,0 +1,70 @@
+version: 1
+
+user:
+  timezone: America/Detroit
+  max_estimated_hours: 20
+  available_hardware: [apple_silicon]
+  languages:
+    python: 1.0
+    cpp: 0.7
+    c: 0.5
+    swift: 0.3
+    rust: 0.3
+    typescript: 0.25
+  interests:
+    - inference
+    - model serving
+    - quantization
+    - gpu kernels
+    - apple silicon
+    - mechanistic interpretability
+    - distributed systems
+    - performance engineering
+  career_targets:
+    - machine learning systems
+    - ai infrastructure
+    - inference engineering
+  preferred_task_types:
+    performance: 1.0
+    bug_fix: 0.9
+    tooling: 0.85
+    testing: 0.55
+    documentation: 0.25
+  avoid:
+    - frontend-only
+    - windows-only
+    - dependency-only
+    - generated documentation
+
+scoring:
+  digest_size: 5
+  global_merge_prior: 0.45
+  prior_strength: 20
+  minimum_confidence_to_surface: 0.30
+
+github:
+  api_version: "2022-11-28"
+  overlap_minutes: 10
+  max_open_issue_pages: 20
+  comment_max_pages: 5
+  pr_history_limit: 300
+  pr_history_days: 365
+  timeline_enabled: true
+  etag_cache_enabled: true
+
+llm:
+  provider: openai
+  model: gpt-5-mini
+  max_candidates_per_run: 30
+  max_input_characters: 60000
+
+repositories:
+  - full_name: ml-explore/mlx
+    enabled: true
+    exclude_labels: [duplicate, invalid, wontfix, question]
+    min_issue_age_minutes: 30
+    max_issue_age_days: 730
+    max_estimated_hours: 24
+  - full_name: ml-explore/mlx-lm
+    enabled: true
+    exclude_labels: [duplicate, invalid, wontfix]
