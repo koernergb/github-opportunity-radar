@@ -1,6 +1,12 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "github-opportunity-radar"
 version = "0.1.0"
+description = "A local-first radar for high-value GitHub contribution opportunities"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.13",
@@ -29,9 +35,13 @@ dev = [
 [project.scripts]
 radar = "radar.cli:app"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC", "SIM", "RUF"]
@@ -39,7 +49,17 @@ select = ["E", "F", "I", "B", "UP", "ASYNC", "SIM", "RUF"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+files = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+
+[tool.coverage.run]
+branch = true
+source = ["radar"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85
