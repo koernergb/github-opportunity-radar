@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from radar import __version__
+from radar.db.session import migrate_database
 from radar.settings import (
     ConfigLoadError,
     EnvironmentSettings,
@@ -57,6 +58,19 @@ def validate_config(
     console.print(f"[green]Valid configuration:[/] {path}")
     console.print(f"Config hash: {settings.config_hash}")
     console.print(f"Profile hash: {settings.profile_hash}")
+
+
+@app.command("init-db")
+def init_db(
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Initialize or upgrade the local database."""
+    url = database_url or EnvironmentSettings().radar_database_url
+    migrate_database(url)
+    console.print("[green]Database is at the latest migration.[/]")
 
 
 @repos_app.command("list")

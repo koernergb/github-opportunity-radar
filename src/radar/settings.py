@@ -170,6 +170,7 @@ class EnvironmentSettings(BaseSettings):
     github_token: str | None = None
     openai_api_key: str | None = None
     radar_config: Path = Path("config/profile.yaml")
+    radar_database_url: str = "sqlite:///data/radar.sqlite"
 
 
 def canonical_hash(value: Any) -> str:

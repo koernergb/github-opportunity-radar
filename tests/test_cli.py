@@ -73,3 +73,13 @@ def test_validate_config_reports_precise_validation_error(tmp_path: Path) -> Non
     assert result.exit_code == 2
     assert "Configuration validation failed" in result.output
     assert "scoring.global_merge_prior" in result.output
+
+
+def test_init_db_migrates_database_to_head(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'radar.sqlite'}"
+
+    result = runner.invoke(app, ["init-db", "--database-url", database_url])
+
+    assert result.exit_code == 0
+    assert "latest migration" in result.output
+    assert (tmp_path / "radar.sqlite").exists()
