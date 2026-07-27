@@ -48,10 +48,15 @@ class RateLimitError(GitHubAPIError):
         reset_at: datetime | None = None,
         retry_after_seconds: float | None = None,
         request_id: str | None = None,
+        status_code: int = 403,
     ) -> None:
-        super().__init__(message, status_code=403, request_id=request_id)
+        super().__init__(message, status_code=status_code, request_id=request_id)
         self.reset_at = reset_at
         self.retry_after_seconds = retry_after_seconds
+
+
+class TransportError(GitHubAPIError):
+    """The network transport failed before a usable response was received."""
 
 
 class EntityParseError(GitHubError):

@@ -1,11 +1,16 @@
 """Tests for the command-line interface."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
+import radar.cli as cli_module
 from radar import __version__
 from radar.cli import app
+from radar.domain.errors import AuthenticationError
+from radar.domain.schemas import RateLimitDTO, RateLimitWindowDTO
 
 runner = CliRunner()
 
@@ -83,3 +88,54 @@ def test_init_db_migrates_database_to_head(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "latest migration" in result.output
     assert (tmp_path / "radar.sqlite").exists()
+
+
+def test_doctor_without_live_check_is_offline() -> None:
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "Local configuration support is available" in result.output
+
+
+def test_doctor_github_requires_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "")
+
+    result = runner.invoke(app, ["doctor", "--github"])
+
+    assert result.exit_code == 3
+    assert "GITHUB_TOKEN is not configured" in result.output
+
+
+def test_doctor_github_reports_live_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    now = datetime(2026, 7, 24, 12, tzinfo=UTC)
+
+    async def healthy_check(*, token: str, api_version: str) -> RateLimitDTO:
+        assert token == "test-token"
+        assert api_version == "2022-11-28"
+        return RateLimitDTO(
+            core=RateLimitWindowDTO(limit=5000, remaining=4999, reset_at=now),
+            observed_at=now,
+        )
+
+    monkeypatch.setattr(cli_module, "_check_github", healthy_check)
+
+    result = runner.invoke(app, ["doctor", "--github"])
+
+    assert result.exit_code == 0
+    assert "GitHub API access is healthy" in result.output
+    assert "4999/5000" in result.output
+
+
+def test_doctor_github_maps_authentication_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "bad-token")
+
+    async def failing_check(*, token: str, api_version: str) -> RateLimitDTO:
+        raise AuthenticationError("Bad credentials", status_code=401)
+
+    monkeypatch.setattr(cli_module, "_check_github", failing_check)
+
+    result = runner.invoke(app, ["doctor", "--github"])
+
+    assert result.exit_code == 3
+    assert "authentication failed" in result.output

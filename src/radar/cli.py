@@ -1,5 +1,6 @@
 """Command-line interface for GitHub Opportunity Radar."""
 
+import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -10,6 +11,10 @@ from rich.table import Table
 
 from radar import __version__
 from radar.db.session import migrate_database
+from radar.domain.errors import AuthenticationError, GitHubError
+from radar.domain.schemas import RateLimitDTO
+from radar.github.client import GitHubClient
+from radar.github.rest import GitHubRestTransport
 from radar.settings import (
     ConfigLoadError,
     EnvironmentSettings,
@@ -71,6 +76,46 @@ def init_db(
     url = database_url or EnvironmentSettings().radar_database_url
     migrate_database(url)
     console.print("[green]Database is at the latest migration.[/]")
+
+
+@app.command()
+def doctor(
+    github: Annotated[
+        bool,
+        typer.Option("--github", help="Check authenticated GitHub API access."),
+    ] = False,
+) -> None:
+    """Check local prerequisites and optional live integrations."""
+    if not github:
+        console.print("[green]Local configuration support is available.[/]")
+        return
+
+    environment = EnvironmentSettings()
+    if not environment.github_token:
+        error_console.print("[red]GitHub check failed:[/] GITHUB_TOKEN is not configured")
+        raise typer.Exit(code=3)
+    try:
+        rate_limit = asyncio.run(
+            _check_github(
+                token=environment.github_token,
+                api_version="2022-11-28",
+            )
+        )
+    except AuthenticationError as error:
+        error_console.print(f"[red]GitHub authentication failed:[/] {error}")
+        raise typer.Exit(code=3) from error
+    except GitHubError as error:
+        error_console.print(f"[red]GitHub check failed:[/] {error}")
+        raise typer.Exit(code=1) from error
+    console.print(
+        "[green]GitHub API access is healthy.[/] "
+        f"Core rate limit: {rate_limit.core.remaining}/{rate_limit.core.limit}"
+    )
+
+
+async def _check_github(*, token: str, api_version: str) -> RateLimitDTO:
+    async with GitHubRestTransport(token=token, api_version=api_version) as transport:
+        return await GitHubClient(transport).get_rate_limit()
 
 
 @repos_app.command("list")
