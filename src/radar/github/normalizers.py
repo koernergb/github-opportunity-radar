@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from radar.domain.errors import EntityParseError
-from radar.domain.schemas import RateLimitDTO, RateLimitWindowDTO, RepositoryDTO
+from radar.domain.schemas import ContentDTO, RateLimitDTO, RateLimitWindowDTO, RepositoryDTO
 
 
 def normalize_repository(payload: dict[str, Any]) -> RepositoryDTO:
@@ -54,6 +54,23 @@ def normalize_rate_limit(
         )
     except (KeyError, TypeError, ValidationError, ValueError) as error:
         raise EntityParseError("invalid GitHub rate-limit payload") from error
+
+
+def normalize_content(payload: dict[str, Any]) -> ContentDTO:
+    """Normalize a repository contents response."""
+    try:
+        return ContentDTO(
+            path=payload["path"],
+            sha=payload["sha"],
+            content=payload.get("content"),
+            encoding=payload.get("encoding"),
+            size=payload["size"],
+            download_url=payload.get("download_url"),
+            content_type=payload.get("type", "file"),
+            raw_payload=payload,
+        )
+    except (KeyError, TypeError, ValidationError) as error:
+        raise EntityParseError("invalid GitHub repository content payload") from error
 
 
 def _normalize_window(payload: dict[str, Any]) -> RateLimitWindowDTO:

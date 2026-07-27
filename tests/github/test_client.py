@@ -94,3 +94,62 @@ async def test_repository_normalizer_wraps_missing_required_fields() -> None:
 
     with pytest.raises(EntityParseError, match="repository payload"):
         await client.get_repository("openai/example")
+
+
+@pytest.mark.asyncio
+async def test_repository_content_endpoint_normalizes_file() -> None:
+    payload = {
+        "path": ".github/CONTRIBUTING.md",
+        "sha": "abc",
+        "content": "IyBIZWxsbw==",
+        "encoding": "base64",
+        "size": 7,
+        "type": "file",
+        "download_url": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/repos/openai/example/contents/.github/CONTRIBUTING.md"
+        return httpx.Response(200, json=payload)
+
+    content = await GitHubClient(_transport(handler)).get_repository_content(
+        "openai/example",
+        ".github/CONTRIBUTING.md",
+    )
+
+    assert content is not None
+    assert content.sha == "abc"
+    assert content.raw_payload == payload
+
+
+@pytest.mark.asyncio
+async def test_missing_repository_content_is_normal() -> None:
+    client = GitHubClient(
+        _transport(lambda request: httpx.Response(404, json={"message": "Not Found"}))
+    )
+
+    assert await client.get_repository_content("openai/example", "SECURITY.md") is None
+
+
+@pytest.mark.asyncio
+async def test_readme_uses_special_github_endpoint() -> None:
+    payload = {
+        "path": "README.rst",
+        "sha": "readme",
+        "content": "UmVhZG1l",
+        "encoding": "base64",
+        "size": 6,
+        "type": "file",
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/repos/openai/example/readme"
+        return httpx.Response(200, json=payload)
+
+    content = await GitHubClient(_transport(handler)).get_repository_content(
+        "openai/example",
+        "README",
+    )
+
+    assert content is not None
+    assert content.path == "README.rst"

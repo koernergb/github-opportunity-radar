@@ -11,6 +11,7 @@ from radar import __version__
 from radar.cli import app
 from radar.domain.errors import AuthenticationError
 from radar.domain.schemas import RateLimitDTO, RateLimitWindowDTO
+from radar.ingestion.repositories import RepositorySyncSummary
 
 runner = CliRunner()
 
@@ -139,3 +140,52 @@ def test_doctor_github_maps_authentication_failure(monkeypatch: pytest.MonkeyPat
 
     assert result.exit_code == 3
     assert "authentication failed" in result.output
+
+
+def test_repos_sync_requires_github_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "")
+
+    result = runner.invoke(
+        app,
+        ["repos", "sync", "--config", "config/profile.example.yaml"],
+    )
+
+    assert result.exit_code == 3
+    assert "GITHUB_TOKEN is not configured" in result.output
+
+
+def test_repos_sync_prints_clear_counts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    async def fake_sync(*args: object, **kwargs: object) -> RepositorySyncSummary:
+        return RepositorySyncSummary(
+            repositories_created=2,
+            repositories_unchanged=1,
+            documents_stored=3,
+            documents_missing=4,
+        )
+
+    monkeypatch.setattr(cli_module, "_sync_repositories_live", fake_sync)
+    database_url = f"sqlite:///{tmp_path / 'radar.sqlite'}"
+
+    result = runner.invoke(
+        app,
+        [
+            "repos",
+            "sync",
+            "--config",
+            "config/profile.example.yaml",
+            "--database-url",
+            database_url,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Repository sync complete" in result.output
+    assert "created=2" in result.output
+    assert "unchanged=1" in result.output
+    assert "documents_stored=3" in result.output
+    assert "documents_missing=4" in result.output

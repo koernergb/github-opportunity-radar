@@ -8,13 +8,20 @@ import typer
 from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
+from sqlalchemy.orm import Session, sessionmaker
 
 from radar import __version__
-from radar.db.session import migrate_database
+from radar.clock import SystemClock
+from radar.db.session import (
+    create_database_engine,
+    create_session_factory,
+    migrate_database,
+)
 from radar.domain.errors import AuthenticationError, GitHubError
 from radar.domain.schemas import RateLimitDTO
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
+from radar.ingestion.repositories import RepositorySyncSummary, sync_repositories
 from radar.settings import (
     ConfigLoadError,
     EnvironmentSettings,
@@ -136,6 +143,73 @@ def list_repositories(
             ", ".join(repository.exclude_labels) or "—",
         )
     console.print(table)
+
+
+@repos_app.command("sync")
+def sync_repository_observations(
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Synchronize configured repositories and contribution documents."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    if not environment.github_token:
+        error_console.print("[red]Repository sync failed:[/] GITHUB_TOKEN is not configured")
+        raise typer.Exit(code=3)
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    sessions = create_session_factory(create_database_engine(url))
+    try:
+        summary = asyncio.run(
+            _sync_repositories_live(
+                settings,
+                token=environment.github_token,
+                sessions=sessions,
+            )
+        )
+    except AuthenticationError as error:
+        error_console.print(f"[red]GitHub authentication failed:[/] {error}")
+        raise typer.Exit(code=3) from error
+    _print_repository_sync_summary(summary)
+
+
+async def _sync_repositories_live(
+    config: RadarConfig,
+    *,
+    token: str,
+    sessions: sessionmaker[Session],
+) -> RepositorySyncSummary:
+    async with GitHubRestTransport(
+        token=token,
+        api_version=config.github.api_version,
+    ) as transport:
+        return await sync_repositories(
+            config,
+            GitHubClient(transport),
+            sessions,
+            SystemClock(),
+        )
+
+
+def _print_repository_sync_summary(summary: RepositorySyncSummary) -> None:
+    console.print(
+        "[green]Repository sync complete.[/] "
+        f"created={summary.repositories_created} "
+        f"updated={summary.repositories_updated} "
+        f"unchanged={summary.repositories_unchanged} "
+        f"failed={summary.repositories_failed} "
+        f"skipped={summary.repositories_skipped} "
+        f"documents_stored={summary.documents_stored} "
+        f"documents_unchanged={summary.documents_unchanged} "
+        f"documents_missing={summary.documents_missing} "
+        f"documents_failed={summary.documents_failed}"
+    )
 
 
 def _load_cli_config(config: Path | None) -> tuple[RadarConfig, Path]:
