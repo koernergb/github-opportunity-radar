@@ -11,6 +11,7 @@ from radar import __version__
 from radar.cli import app
 from radar.domain.errors import AuthenticationError
 from radar.domain.schemas import RateLimitDTO, RateLimitWindowDTO
+from radar.ingestion.issues import IssueSyncSummary
 from radar.ingestion.repositories import RepositorySyncSummary
 
 runner = CliRunner()
@@ -189,3 +190,39 @@ def test_repos_sync_prints_clear_counts(
     assert "unchanged=1" in result.output
     assert "documents_stored=3" in result.output
     assert "documents_missing=4" in result.output
+
+
+def test_issue_sync_prints_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    async def fake_sync(*args: object, **kwargs: object) -> IssueSyncSummary:
+        assert kwargs["repository"] == "ml-explore/mlx"
+        assert kwargs["full"] is True
+        return IssueSyncSummary(
+            issues_created=2,
+            comments_updated=1,
+            pull_requests_excluded=3,
+        )
+
+    monkeypatch.setattr(cli_module, "_sync_issues_live", fake_sync)
+    database_url = f"sqlite:///{tmp_path / 'radar.sqlite'}"
+
+    result = runner.invoke(
+        app,
+        [
+            "sync",
+            "--repo",
+            "ml-explore/mlx",
+            "--full",
+            "--config",
+            "config/profile.example.yaml",
+            "--database-url",
+            database_url,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Issue sync complete" in result.output
+    assert "created=2" in result.output
+    assert "comments_updated=1" in result.output
+    assert "prs_excluded=3" in result.output

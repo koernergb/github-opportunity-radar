@@ -21,6 +21,7 @@ from radar.domain.errors import AuthenticationError, GitHubError
 from radar.domain.schemas import RateLimitDTO
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
+from radar.ingestion.issues import IssueSyncSummary, sync_issues
 from radar.ingestion.repositories import RepositorySyncSummary, sync_repositories
 from radar.settings import (
     ConfigLoadError,
@@ -210,6 +211,80 @@ def _print_repository_sync_summary(summary: RepositorySyncSummary) -> None:
         f"documents_missing={summary.documents_missing} "
         f"documents_failed={summary.documents_failed}"
     )
+
+
+@app.command("sync")
+def sync_issue_observations(
+    repository: Annotated[
+        str | None,
+        typer.Option("--repo", help="Limit synchronization to owner/repository."),
+    ] = None,
+    full: Annotated[
+        bool,
+        typer.Option("--full", help="Ignore incremental cursors."),
+    ] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Synchronize open issues and changed-issue comments."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    if not environment.github_token:
+        error_console.print("[red]Issue sync failed:[/] GITHUB_TOKEN is not configured")
+        raise typer.Exit(code=3)
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    sessions = create_session_factory(create_database_engine(url))
+    try:
+        summary = asyncio.run(
+            _sync_issues_live(
+                settings,
+                token=environment.github_token,
+                sessions=sessions,
+                repository=repository,
+                full=full,
+            )
+        )
+    except AuthenticationError as error:
+        error_console.print(f"[red]GitHub authentication failed:[/] {error}")
+        raise typer.Exit(code=3) from error
+    console.print(
+        "[green]Issue sync complete.[/] "
+        f"created={summary.issues_created} updated={summary.issues_updated} "
+        f"unchanged={summary.issues_unchanged} prs_excluded={summary.pull_requests_excluded} "
+        f"comments_created={summary.comments_created} "
+        f"comments_updated={summary.comments_updated} "
+        f"comment_failures={summary.comment_failures} "
+        f"repositories_failed={summary.repositories_failed}"
+    )
+
+
+async def _sync_issues_live(
+    config: RadarConfig,
+    *,
+    token: str,
+    sessions: sessionmaker[Session],
+    repository: str | None,
+    full: bool,
+) -> IssueSyncSummary:
+    async with GitHubRestTransport(
+        token=token,
+        api_version=config.github.api_version,
+    ) as transport:
+        return await sync_issues(
+            config,
+            GitHubClient(transport),
+            sessions,
+            SystemClock(),
+            repository_filter=repository,
+            full=full,
+        )
 
 
 def _load_cli_config(config: Path | None) -> tuple[RadarConfig, Path]:

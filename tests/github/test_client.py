@@ -153,3 +153,67 @@ async def test_readme_uses_special_github_endpoint() -> None:
 
     assert content is not None
     assert content.path == "README.rst"
+
+
+@pytest.mark.asyncio
+async def test_issue_and_comment_endpoints_are_bounded_and_normalized() -> None:
+    issue_payload = {
+        "id": 10,
+        "node_id": "I_10",
+        "number": 7,
+        "title": "Bug",
+        "body": None,
+        "state": "open",
+        "html_url": "https://github.com/openai/example/issues/7",
+        "user": {"login": "author", "id": 2, "node_id": "U_2", "type": "User"},
+        "author_association": "CONTRIBUTOR",
+        "labels": [{"name": "bug", "color": "ff0000"}],
+        "assignees": [],
+        "created_at": NOW.isoformat(),
+        "updated_at": NOW.isoformat(),
+        "comments": 1,
+        "pull_request": {"url": "https://api.github.com/repos/openai/example/pulls/7"},
+    }
+    comment_payload = {
+        "id": 20,
+        "node_id": "IC_20",
+        "body": "Updated",
+        "html_url": "https://github.com/openai/example/issues/7#issuecomment-20",
+        "user": {"login": "maintainer"},
+        "author_association": "MEMBER",
+        "created_at": NOW.isoformat(),
+        "updated_at": NOW.isoformat(),
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/comments"):
+            assert request.url.params["per_page"] == "100"
+            return httpx.Response(200, json=[comment_payload])
+        assert request.url.params["state"] == "open"
+        assert request.url.params["since"].endswith("Z")
+        return httpx.Response(200, json=[issue_payload])
+
+    client = GitHubClient(_transport(handler))
+    issues = [
+        item
+        async for item in await client.list_issues(
+            "openai/example",
+            state="open",
+            since=NOW,
+            max_pages=1,
+        )
+    ]
+    comments = [
+        item
+        async for item in await client.list_issue_comments(
+            "openai/example",
+            7,
+            since=None,
+            max_pages=1,
+        )
+    ]
+
+    assert issues[0].is_pull_request is True
+    assert issues[0].labels[0].name == "bug"
+    assert comments[0].body == "Updated"
+    assert comments[0].author_association is not None
