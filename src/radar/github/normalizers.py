@@ -11,9 +11,12 @@ from radar.domain.schemas import (
     IssueCommentDTO,
     IssueDTO,
     LabelDTO,
+    PullRequestCommentDTO,
+    PullRequestDTO,
     RateLimitDTO,
     RateLimitWindowDTO,
     RepositoryDTO,
+    ReviewDTO,
     UserDTO,
 )
 
@@ -139,6 +142,78 @@ def normalize_issue_comment(payload: dict[str, Any], *, issue_number: int) -> Is
         )
     except (KeyError, TypeError, ValidationError) as error:
         raise EntityParseError("invalid GitHub issue comment payload") from error
+
+
+def normalize_pull_request(payload: dict[str, Any], *, repository: str) -> PullRequestDTO:
+    """Normalize list or hydrated pull-request payloads."""
+    try:
+        return PullRequestDTO(
+            github_id=payload["id"],
+            node_id=payload["node_id"],
+            repository=repository,
+            number=payload["number"],
+            title=payload["title"],
+            body=payload.get("body"),
+            url=payload["html_url"],
+            author=_normalize_user(payload.get("user")),
+            author_association=payload.get("author_association"),
+            state=payload["state"],
+            draft=payload.get("draft", False),
+            merged=payload.get("merged", payload.get("merged_at") is not None),
+            created_at=payload["created_at"],
+            updated_at=payload["updated_at"],
+            closed_at=payload.get("closed_at"),
+            merged_at=payload.get("merged_at"),
+            additions=payload.get("additions"),
+            deletions=payload.get("deletions"),
+            changed_files=payload.get("changed_files"),
+            commit_count=payload.get("commits"),
+            comment_count=payload.get("comments"),
+            review_comment_count=payload.get("review_comments"),
+            raw_payload=payload,
+        )
+    except (KeyError, TypeError, ValidationError) as error:
+        raise EntityParseError("invalid GitHub pull request payload") from error
+
+
+def normalize_review(payload: dict[str, Any], *, pull_request_number: int) -> ReviewDTO:
+    try:
+        return ReviewDTO(
+            github_id=payload["id"],
+            node_id=payload["node_id"],
+            pull_request_number=pull_request_number,
+            author=_normalize_user(payload.get("user")),
+            author_association=payload.get("author_association"),
+            state=payload["state"],
+            body=payload.get("body"),
+            submitted_at=payload.get("submitted_at"),
+            raw_payload=payload,
+        )
+    except (KeyError, TypeError, ValidationError) as error:
+        raise EntityParseError("invalid GitHub pull request review payload") from error
+
+
+def normalize_pull_request_comment(
+    payload: dict[str, Any],
+    *,
+    pull_request_number: int,
+    comment_type: str,
+) -> PullRequestCommentDTO:
+    try:
+        return PullRequestCommentDTO(
+            github_id=payload["id"],
+            node_id=payload.get("node_id"),
+            pull_request_number=pull_request_number,
+            author=_normalize_user(payload.get("user")),
+            author_association=payload.get("author_association"),
+            body=payload.get("body") or "",
+            comment_type=comment_type,
+            created_at=payload["created_at"],
+            updated_at=payload["updated_at"],
+            raw_payload=payload,
+        )
+    except (KeyError, TypeError, ValidationError) as error:
+        raise EntityParseError("invalid GitHub pull request comment payload") from error
 
 
 def _normalize_window(payload: dict[str, Any]) -> RateLimitWindowDTO:

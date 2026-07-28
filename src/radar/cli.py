@@ -22,6 +22,7 @@ from radar.domain.schemas import RateLimitDTO
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
 from radar.ingestion.issues import IssueSyncSummary, sync_issues
+from radar.ingestion.pull_requests import sync_pull_request_history
 from radar.ingestion.repositories import RepositorySyncSummary, sync_repositories
 from radar.settings import (
     ConfigLoadError,
@@ -261,7 +262,11 @@ def sync_issue_observations(
         f"comments_created={summary.comments_created} "
         f"comments_updated={summary.comments_updated} "
         f"comment_failures={summary.comment_failures} "
-        f"repositories_failed={summary.repositories_failed}"
+        f"repositories_failed={summary.repositories_failed} "
+        f"pull_requests_synced={summary.pull_requests_synced} "
+        f"reviews_stored={summary.reviews_stored} "
+        f"pr_comments_stored={summary.pr_comments_stored} "
+        f"issue_links_stored={summary.issue_links_stored}"
     )
 
 
@@ -277,14 +282,31 @@ async def _sync_issues_live(
         token=token,
         api_version=config.github.api_version,
     ) as transport:
-        return await sync_issues(
+        client = GitHubClient(transport)
+        summary = await sync_issues(
             config,
-            GitHubClient(transport),
+            client,
             sessions,
             SystemClock(),
             repository_filter=repository,
             full=full,
         )
+        pr_summary = await sync_pull_request_history(
+            config,
+            client,
+            sessions,
+            SystemClock(),
+            repository_filter=repository,
+        )
+        summary.pull_requests_synced = (
+            pr_summary.pull_requests_created
+            + pr_summary.pull_requests_updated
+            + pr_summary.pull_requests_unchanged
+        )
+        summary.reviews_stored = pr_summary.reviews_stored
+        summary.pr_comments_stored = pr_summary.comments_stored
+        summary.issue_links_stored = pr_summary.issue_links_stored
+        return summary
 
 
 def _load_cli_config(config: Path | None) -> tuple[RadarConfig, Path]:

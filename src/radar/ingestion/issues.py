@@ -59,6 +59,10 @@ class IssueSyncSummary:
     comments_updated: int = 0
     comment_failures: int = 0
     repositories_failed: int = 0
+    pull_requests_synced: int = 0
+    reviews_stored: int = 0
+    pr_comments_stored: int = 0
+    issue_links_stored: int = 0
 
     def to_dict(self) -> dict[str, int]:
         return asdict(self)

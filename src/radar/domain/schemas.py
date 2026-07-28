@@ -163,6 +163,19 @@ class ReviewDTO(DTO):
     raw_payload: JsonObject = Field(default_factory=dict)
 
 
+class PullRequestCommentDTO(DTO):
+    github_id: int
+    node_id: str | None = None
+    pull_request_number: int = Field(gt=0)
+    author: UserDTO | None = None
+    author_association: AuthorAssociation | None = None
+    body: str
+    comment_type: str
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+    raw_payload: JsonObject = Field(default_factory=dict)
+
+
 class ContentDTO(DTO):
     path: str
     sha: str

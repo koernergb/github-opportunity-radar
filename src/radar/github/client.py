@@ -10,16 +10,22 @@ from radar.domain.schemas import (
     ContentDTO,
     IssueCommentDTO,
     IssueDTO,
+    PullRequestCommentDTO,
+    PullRequestDTO,
     RateLimitDTO,
     RepositoryDTO,
+    ReviewDTO,
     validate_repository_name,
 )
 from radar.github.normalizers import (
     normalize_content,
     normalize_issue,
     normalize_issue_comment,
+    normalize_pull_request,
+    normalize_pull_request_comment,
     normalize_rate_limit,
     normalize_repository,
+    normalize_review,
 )
 from radar.github.pagination import paginate_json
 from radar.github.rest import GitHubRestTransport
@@ -122,6 +128,94 @@ class GitHubClient:
                 max_pages=max_pages,
             ):
                 yield normalize_issue_comment(payload, issue_number=number)
+
+        return generate()
+
+    async def list_pull_requests(
+        self,
+        full_name: str,
+        *,
+        state: str,
+        max_items: int,
+    ) -> AsyncIterator[PullRequestDTO]:
+        validate_repository_name(full_name)
+        owner, repository = full_name.split("/")
+        max_pages = max(1, (max_items + 99) // 100)
+
+        async def generate() -> AsyncIterator[PullRequestDTO]:
+            emitted = 0
+            async for payload in paginate_json(
+                self._transport,
+                f"/repos/{quote(owner, safe='')}/{quote(repository, safe='')}/pulls",
+                params={
+                    "state": state,
+                    "sort": "created",
+                    "direction": "desc",
+                    "per_page": 100,
+                },
+                max_pages=max_pages,
+            ):
+                if emitted >= max_items:
+                    return
+                emitted += 1
+                yield normalize_pull_request(payload, repository=full_name)
+
+        return generate()
+
+    async def get_pull_request(self, full_name: str, number: int) -> PullRequestDTO:
+        validate_repository_name(full_name)
+        owner, repository = full_name.split("/")
+        response = await self._transport.get(
+            f"/repos/{quote(owner, safe='')}/{quote(repository, safe='')}/pulls/{number}"
+        )
+        return normalize_pull_request(_require_object(response.data), repository=full_name)
+
+    async def list_pull_request_reviews(
+        self,
+        full_name: str,
+        number: int,
+        *,
+        max_pages: int,
+    ) -> AsyncIterator[ReviewDTO]:
+        validate_repository_name(full_name)
+        owner, repository = full_name.split("/")
+
+        async def generate() -> AsyncIterator[ReviewDTO]:
+            path = (
+                f"/repos/{quote(owner, safe='')}/{quote(repository, safe='')}"
+                f"/pulls/{number}/reviews"
+            )
+            async for payload in paginate_json(
+                self._transport, path, params={"per_page": 100}, max_pages=max_pages
+            ):
+                yield normalize_review(payload, pull_request_number=number)
+
+        return generate()
+
+    async def list_pull_request_comments(
+        self,
+        full_name: str,
+        number: int,
+        *,
+        max_pages: int,
+    ) -> AsyncIterator[PullRequestCommentDTO]:
+        validate_repository_name(full_name)
+        owner, repository = full_name.split("/")
+
+        async def generate() -> AsyncIterator[PullRequestCommentDTO]:
+            base = f"/repos/{quote(owner, safe='')}/{quote(repository, safe='')}"
+            for path, comment_type in (
+                (f"{base}/issues/{number}/comments", "issue"),
+                (f"{base}/pulls/{number}/comments", "review"),
+            ):
+                async for payload in paginate_json(
+                    self._transport, path, params={"per_page": 100}, max_pages=max_pages
+                ):
+                    yield normalize_pull_request_comment(
+                        payload,
+                        pull_request_number=number,
+                        comment_type=comment_type,
+                    )
 
         return generate()
 
