@@ -226,3 +226,21 @@ def test_issue_sync_prints_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert "created=2" in result.output
     assert "comments_updated=1" in result.output
     assert "prs_excluded=3" in result.output
+
+
+def test_metrics_command_handles_empty_database(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'radar.sqlite'}"
+
+    result = runner.invoke(
+        app,
+        [
+            "metrics",
+            "--config",
+            "config/profile.example.yaml",
+            "--database-url",
+            database_url,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Calculated 0 repository metric snapshot(s)" in result.output

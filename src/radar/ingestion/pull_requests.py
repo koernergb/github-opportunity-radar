@@ -189,6 +189,10 @@ def is_credible_maintainer(
     )
 
 
+def is_bot(login: str) -> bool:
+    return _BOT_RE.search(login) is not None
+
+
 def is_external_contributor(association: AuthorAssociation | None) -> bool:
     """Classify CONTRIBUTOR and unknown associations as external by default."""
     return association not in MAINTAINER_ASSOCIATIONS

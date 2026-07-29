@@ -24,6 +24,7 @@ from radar.github.rest import GitHubRestTransport
 from radar.ingestion.issues import IssueSyncSummary, sync_issues
 from radar.ingestion.pull_requests import sync_pull_request_history
 from radar.ingestion.repositories import RepositorySyncSummary, sync_repositories
+from radar.metrics.repository_health import calculate_repository_metrics
 from radar.settings import (
     ConfigLoadError,
     EnvironmentSettings,
@@ -307,6 +308,48 @@ async def _sync_issues_live(
         summary.pr_comments_stored = pr_summary.comments_stored
         summary.issue_links_stored = pr_summary.issue_links_stored
         return summary
+
+
+@app.command("metrics")
+def calculate_metrics(
+    repository: Annotated[
+        str | None,
+        typer.Option("--repo", help="Limit calculation to owner/repository."),
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Calculate versioned repository contribution metrics."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    sessions = create_session_factory(create_database_engine(url))
+    snapshots = calculate_repository_metrics(
+        settings,
+        sessions,
+        SystemClock(),
+        repository_filter=repository,
+    )
+    table = Table("Repository ID", "External PRs", "Merge rate", "Shrunk rate", "Confidence")
+    for snapshot in snapshots:
+        table.add_row(
+            str(snapshot.repository_id),
+            str(snapshot.external_pr_count),
+            "unknown"
+            if snapshot.external_merge_rate is None
+            else f"{snapshot.external_merge_rate:.3f}",
+            f"{snapshot.shrunk_merge_rate:.3f}",
+            f"{snapshot.data_confidence:.3f}",
+        )
+    console.print(table)
+    console.print(f"[green]Calculated {len(snapshots)} repository metric snapshot(s).[/]")
 
 
 def _load_cli_config(config: Path | None) -> tuple[RadarConfig, Path]:
