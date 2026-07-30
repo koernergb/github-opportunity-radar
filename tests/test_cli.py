@@ -244,3 +244,21 @@ def test_metrics_command_handles_empty_database(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Calculated 0 repository metric snapshot(s)" in result.output
+
+
+def test_filter_command_handles_empty_database(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'radar.sqlite'}"
+
+    result = runner.invoke(
+        app,
+        [
+            "filter",
+            "--config",
+            "config/profile.example.yaml",
+            "--database-url",
+            database_url,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "eligible=0 warning=0 excluded=0" in result.output

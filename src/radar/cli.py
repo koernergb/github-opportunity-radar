@@ -19,6 +19,7 @@ from radar.db.session import (
 )
 from radar.domain.errors import AuthenticationError, GitHubError
 from radar.domain.schemas import RateLimitDTO
+from radar.filtering.engine import filter_issues
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
 from radar.ingestion.issues import IssueSyncSummary, sync_issues
@@ -350,6 +351,40 @@ def calculate_metrics(
         )
     console.print(table)
     console.print(f"[green]Calculated {len(snapshots)} repository metric snapshot(s).[/]")
+
+
+@app.command("filter")
+def apply_filters(
+    repository: Annotated[
+        str | None,
+        typer.Option("--repo", help="Limit filtering to owner/repository."),
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Apply and persist deterministic issue filters."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    sessions = create_session_factory(create_database_engine(url))
+    counts = filter_issues(
+        settings,
+        sessions,
+        SystemClock(),
+        repository_filter=repository,
+    )
+    console.print(
+        "[green]Filtering complete.[/] "
+        f"eligible={counts['eligible']} warning={counts['warning']} "
+        f"excluded={counts['excluded']}"
+    )
 
 
 def _load_cli_config(config: Path | None) -> tuple[RadarConfig, Path]:

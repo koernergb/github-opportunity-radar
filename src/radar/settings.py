@@ -113,6 +113,7 @@ class RepositorySettings(StrictModel):
     max_issue_age_days: PositiveInt = 730
     max_estimated_hours: PositiveFloat | None = None
     custom_weights: dict[str, UnitFloat] = Field(default_factory=dict)
+    exclude_assigned_to_others: bool = True
 
     @field_validator("full_name")
     @classmethod
