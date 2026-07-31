@@ -289,9 +289,20 @@ def score_issue(
     return score
 
 
-def rank_scores(session: Session, *, limit: int | None = None) -> list[IssueScore]:
+def rank_scores(
+    session: Session,
+    *,
+    limit: int | None = None,
+    score_version: str | None = None,
+    profile_hash: str | None = None,
+) -> list[IssueScore]:
     """Rank only eligible scores with deterministic repository/issue tie breaks."""
-    scores = session.scalars(select(IssueScore)).all()
+    statement = select(IssueScore)
+    if score_version is not None:
+        statement = statement.where(IssueScore.score_version == score_version)
+    if profile_hash is not None:
+        statement = statement.where(IssueScore.profile_hash == profile_hash)
+    scores = session.scalars(statement).all()
     eligible = [score for score in scores if score.explanation.get("ranking_eligible") is True]
 
     def ordering(score: IssueScore) -> tuple[float, float, str, int]:

@@ -1,0 +1,56 @@
+# GitHub Opportunity Radar
+
+Generated: {{ digest.generated_at.isoformat() }}
+
+{% if not digest.items %}
+{{ digest.empty_message }}
+{% else %}
+{% for item in digest.items %}
+## {{ item.rank }}. {{ item.repository }}#{{ item.number }} — {{ item.title }}
+
+- Score: {{ "%.1f"|format(item.score) }}/100
+- Confidence: {{ "%.0f%%"|format(item.confidence * 100) }}{{ " — **LOW CONFIDENCE: verify missing or uncertain evidence**" if item.low_confidence else "" }}
+- URL: {{ item.url }}
+- Effort: {{ "%g"|format(item.effort_low_hours) }}–{{ "%g"|format(item.effort_high_hours) }} hours
+- Merge likelihood: {{ item.merge_band }} ({{ "%.0f%%"|format(item.merge_estimate * 100) }}), heuristic estimate; repository sample n={{ item.history_sample }}
+
+### Why now
+
+{% for reason in item.why_now %}
+- {{ reason }}
+{% endfor %}
+{{ "" }}
+### Positive evidence
+
+{% if item.positive_signals %}
+{% for signal in item.positive_signals %}
+- {{ signal }}
+{% endfor %}
+{% else %}
+- No semantic positive signals were available.
+{% endif %}
+{{ "" }}
+### Risks
+
+{% if item.risks %}
+{% for risk in item.risks %}
+- {{ risk }}
+{% endfor %}
+{% else %}
+- No semantic risks were reported; verify independently.
+{% endif %}
+{{ "" }}
+### Suggested first move
+
+{{ item.suggested_first_move }}
+
+### Investigation steps
+
+{% for step in item.investigation_steps %}
+1. {{ step }}
+{% endfor %}
+{{ "" }}
+Freshness: issue {{ item.issue_updated_at }}; analysis {{ item.analyzed_at }}; score {{ item.scored_at }}.
+
+{% endfor %}
+{% endif %}

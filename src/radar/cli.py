@@ -17,6 +17,9 @@ from radar.db.session import (
     create_session_factory,
     migrate_database,
 )
+from radar.digest.markdown import render_markdown
+from radar.digest.models import build_digest
+from radar.digest.terminal import render_terminal
 from radar.domain.errors import AuthenticationError, GitHubError
 from radar.domain.schemas import RateLimitDTO
 from radar.filtering.engine import filter_issues
@@ -122,6 +125,53 @@ def doctor(
         "[green]GitHub API access is healthy.[/] "
         f"Core rate limit: {rate_limit.core.remaining}/{rate_limit.core.limit}"
     )
+
+
+@app.command("digest")
+def show_digest(
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Output format: terminal or markdown."),
+    ] = "terminal",
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", help="Write Markdown to this path."),
+    ] = None,
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", min=1, help="Maximum candidates, capped by digest_size."),
+    ] = None,
+) -> None:
+    """Render the current deterministic opportunity digest."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    factory = create_session_factory(create_database_engine(url))
+    with factory() as session:
+        digest = build_digest(session, settings, generated_at=SystemClock().now(), limit=limit)
+    if output_format == "terminal":
+        if output is not None:
+            raise typer.BadParameter("--output requires --format markdown", param_hint="--output")
+        render_terminal(digest, console)
+        return
+    if output_format != "markdown":
+        raise typer.BadParameter("must be terminal or markdown", param_hint="--format")
+    rendered = render_markdown(digest)
+    if output is None:
+        typer.echo(rendered, nl=False)
+    else:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered, encoding="utf-8")
+        console.print(f"[green]Digest written:[/] {output}")
 
 
 async def _check_github(*, token: str, api_version: str) -> RateLimitDTO:
