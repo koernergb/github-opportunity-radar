@@ -1,12 +1,12 @@
 """Strict versioned semantic-analysis output schema."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 UnitFloat = Annotated[float, Field(ge=0, le=1)]
 PositiveFloat = Annotated[float, Field(gt=0)]
-ANALYSIS_SCHEMA_VERSION = "issue_analysis_v1"
+ANALYSIS_SCHEMA_VERSION: Literal["issue_analysis_v1"] = "issue_analysis_v1"
 
 
 class IssueAnalysisOutput(BaseModel):
@@ -14,7 +14,7 @@ class IssueAnalysisOutput(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: str = ANALYSIS_SCHEMA_VERSION
+    schema_version: Literal["issue_analysis_v1"] = ANALYSIS_SCHEMA_VERSION
     task_type: str
     short_summary: str
     likely_work: tuple[str, ...]
