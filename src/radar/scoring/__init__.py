@@ -1,1 +1,1 @@
-"""Deterministic opportunity scoring package."""
+"""Versioned deterministic scoring package."""
