@@ -34,6 +34,7 @@ from radar.ingestion.issues import IssueSyncSummary, sync_issues
 from radar.ingestion.pull_requests import sync_pull_request_history
 from radar.ingestion.repositories import RepositorySyncSummary, sync_repositories
 from radar.metrics.repository_health import calculate_repository_metrics
+from radar.pipeline.orchestrator import PipelineLockedError, PipelineOutcome, run_pipeline
 from radar.settings import (
     ConfigLoadError,
     EnvironmentSettings,
@@ -475,6 +476,63 @@ def apply_filters(
         f"eligible={counts['eligible']} warning={counts['warning']} "
         f"excluded={counts['excluded']}"
     )
+
+
+@app.command("run")
+def run_all(
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+    fallback_only: Annotated[
+        bool,
+        typer.Option("--fallback-only", help="Skip OpenAI and use deterministic fallback."),
+    ] = False,
+    deadline_seconds: Annotated[
+        int,
+        typer.Option("--deadline-seconds", min=1, help="Bound total pipeline runtime."),
+    ] = 600,
+) -> None:
+    """Run sync, metrics, filter, analysis, scoring, and digest."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    if not environment.github_token:
+        error_console.print("[red]Pipeline failed:[/] GITHUB_TOKEN is not configured")
+        raise typer.Exit(code=3)
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    sessions = create_session_factory(create_database_engine(url))
+
+    async def execute() -> PipelineOutcome:
+        async with GitHubRestTransport(
+            token=environment.github_token,
+            api_version=settings.github.api_version,
+        ) as transport:
+            return await run_pipeline(
+                settings,
+                GitHubClient(transport),
+                sessions,
+                SystemClock(),
+                api_key=environment.openai_api_key,
+                fallback_only=fallback_only,
+                deadline_seconds=deadline_seconds,
+            )
+
+    try:
+        outcome = asyncio.run(execute())
+    except PipelineLockedError as error:
+        error_console.print(f"[yellow]Pipeline already running:[/] {error}")
+        raise typer.Exit(code=5) from error
+    except AuthenticationError as error:
+        error_console.print(f"[red]GitHub authentication failed:[/] {error}")
+        raise typer.Exit(code=3) from error
+    typer.echo(outcome.markdown, nl=False)
+    if outcome.exit_code:
+        raise typer.Exit(code=outcome.exit_code)
 
 
 def _load_cli_config(config: Path | None) -> tuple[RadarConfig, Path]:
