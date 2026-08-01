@@ -17,6 +17,7 @@ from radar.db.models import (
     IssueScore,
     Repository,
     RepositoryMetricSnapshot,
+    UserFeedback,
 )
 from radar.scoring.features import (
     filter_rule_evidence,
@@ -29,6 +30,22 @@ from radar.scoring.features import (
 from radar.settings import RadarConfig
 
 SCORE_VERSION = "v1_heuristic"
+FEEDBACK_MODIFIER_VERSION = "preference_modifiers_v1"
+_FEEDBACK_MULTIPLIERS = {
+    "interested": 1.05,
+    "too_hard": 0.75,
+    "too_vague": 0.80,
+    "low_value": 0.70,
+    "bad_repository_fit": 0.0,
+    "already_claimed": 0.50,
+    "not_enough_time": 0.65,
+    "investigating": 1.08,
+    "commented": 1.08,
+    "implementation_started": 1.10,
+    "pr_opened": 1.10,
+    "abandoned": 0.50,
+    "rejected": 0.0,
+}
 
 
 @dataclass(frozen=True)
@@ -56,6 +73,7 @@ def calculate_score(
     stored_comment_count: int,
     config: RadarConfig,
     clock: Clock,
+    feedback: UserFeedback | None = None,
 ) -> ScoreCalculation:
     """Calculate a bounded score and retain every term used to derive it."""
     semantic = analysis.analysis_json
@@ -128,11 +146,17 @@ def calculate_score(
     base = 100 * raw_value / effort_cost
     risk_penalty = 20 * risk
     uncertainty_penalty = 10 * (1 - confidence)
-    total = _clamp(0.0, 100.0, calibrated_scale(base) - risk_penalty - uncertainty_penalty)
+    before_feedback = _clamp(
+        0.0, 100.0, calibrated_scale(base) - risk_penalty - uncertainty_penalty
+    )
+    feedback_multiplier = _FEEDBACK_MULTIPLIERS.get(feedback.status, 1.0) if feedback else 1.0
+    total = _clamp(0.0, 100.0, before_feedback * feedback_multiplier)
     ranking_eligible = filter_result is not None and filter_result.status != "excluded"
     if active_linked_pr:
         ranking_eligible = False
         total = 0.0
+    if feedback is not None and feedback.status in {"bad_repository_fit", "rejected"}:
+        ranking_eligible = False
     missing_data = list(fit_result.missing)
     if metric is None:
         missing_data.append("repository_metrics")
@@ -154,6 +178,7 @@ def calculate_score(
             "analysis_schema": analysis.schema_version,
             "metric": metric.metric_version if metric else None,
             "filter": filter_result.filter_version if filter_result else None,
+            "feedback_modifier": FEEDBACK_MODIFIER_VERSION,
         },
         "data_freshness": {
             "issue_updated_at": issue.github_updated_at.isoformat(),
@@ -175,6 +200,14 @@ def calculate_score(
         "calibrated_base": calibrated_scale(base),
         "risk_penalty": risk_penalty,
         "uncertainty_penalty": uncertainty_penalty,
+        "feedback_modifier": {
+            "version": FEEDBACK_MODIFIER_VERSION,
+            "status": feedback.status if feedback else None,
+            "feedback_id": str(feedback.id) if feedback else None,
+            "multiplier": feedback_multiplier,
+            "score_before": before_feedback,
+            "score_after": total,
+        },
         "missing_data": missing_data,
         "filter_evidence": {
             code: filter_rule_evidence(filter_result, code) for code in sorted(reason_codes)
@@ -225,6 +258,11 @@ def score_issue(
         .where(IssueFilterResult.issue_id == issue.id)
         .order_by(IssueFilterResult.evaluated_at.desc())
     )
+    feedback = session.scalar(
+        select(UserFeedback)
+        .where(UserFeedback.issue_id == issue.id)
+        .order_by(UserFeedback.created_at.desc(), UserFeedback.id.desc())
+    )
     stored_comments = session.scalar(
         select(func.count()).select_from(IssueComment).where(IssueComment.issue_id == issue.id)
     )
@@ -237,6 +275,7 @@ def score_issue(
         stored_comment_count=stored_comments or 0,
         config=config,
         clock=clock,
+        feedback=feedback,
     )
     score = session.scalar(
         select(IssueScore).where(

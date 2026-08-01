@@ -22,6 +22,11 @@ from radar.digest.models import build_digest
 from radar.digest.terminal import render_terminal
 from radar.domain.errors import AuthenticationError, GitHubError
 from radar.domain.schemas import RateLimitDTO
+from radar.feedback.service import (
+    FeedbackValidationError,
+    record_feedback,
+    resolve_issue_reference,
+)
 from radar.filtering.engine import filter_issues
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
@@ -172,6 +177,41 @@ def show_digest(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(rendered, encoding="utf-8")
         console.print(f"[green]Digest written:[/] {output}")
+
+
+@app.command("feedback")
+def add_feedback(
+    issue_reference: Annotated[str, typer.Argument(help="Issue as owner/repository#number.")],
+    status: Annotated[str, typer.Argument(help="New feedback status.")],
+    note: Annotated[str | None, typer.Option("--note", help="Optional private note.")] = None,
+    pr_url: Annotated[
+        str | None,
+        typer.Option("--pr-url", help="Related GitHub pull request URL."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Append validated user feedback without changing GitHub observations."""
+    environment = EnvironmentSettings()
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    factory = create_session_factory(create_database_engine(url))
+    try:
+        with factory.begin() as session:
+            issue = resolve_issue_reference(session, issue_reference)
+            feedback = record_feedback(
+                session,
+                issue_id=issue.id,
+                status=status,
+                note=note,
+                pr_url=pr_url,
+                clock=SystemClock(),
+            )
+    except FeedbackValidationError as error:
+        raise typer.BadParameter(str(error)) from error
+    console.print(f"[green]Feedback appended:[/] {feedback.status} ({feedback.id})")
 
 
 async def _check_github(*, token: str, api_version: str) -> RateLimitDTO:

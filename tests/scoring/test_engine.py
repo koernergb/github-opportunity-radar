@@ -17,6 +17,7 @@ from radar.db.models import (
     IssueFilterResult,
     Repository,
     RepositoryMetricSnapshot,
+    UserFeedback,
 )
 from radar.scoring.engine import calculate_score, rank_scores, score_issue
 from radar.scoring.explanations import explain_score
@@ -251,6 +252,44 @@ def test_missing_repository_metrics_lowers_confidence() -> None:
 
     assert missing.confidence < complete.confidence
     assert "repository_metrics" in missing.explanation["missing_data"]
+
+
+def test_feedback_modifier_is_versioned_visible_and_monotonic() -> None:
+    config = _config()
+    repository = _repository()
+    issue = _issue(repository, 1, "Task")
+    analysis = _analysis(issue, config)
+    metric = _metric(repository)
+    filter_result = _filter(issue)
+    feedback = UserFeedback(
+        issue_id=issue.id,
+        status="too_hard",
+        note=None,
+        pr_url=None,
+        created_at=NOW,
+    )
+
+    baseline = _calculate(
+        issue, repository, analysis, config, metric=metric, filter_result=filter_result
+    )
+    modified = calculate_score(
+        issue=issue,
+        repository=repository,
+        analysis=analysis,
+        metric=metric,
+        filter_result=filter_result,
+        stored_comment_count=0,
+        config=config,
+        clock=FixedClock(),
+        feedback=feedback,
+    )
+
+    modifier = modified.explanation["feedback_modifier"]
+    assert modified.total == pytest.approx(baseline.total * 0.75)
+    assert modifier["version"] == "preference_modifiers_v1"
+    assert modifier["status"] == "too_hard"
+    assert modifier["score_before"] == baseline.total
+    assert modifier["score_after"] == modified.total
 
 
 def test_persistence_is_deterministic_and_golden_ranking_excludes_active_pr() -> None:
