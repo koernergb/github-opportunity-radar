@@ -1,0 +1,12 @@
+[
+  {"id": "ideal-performance", "expected": "high", "condition": "small clear performance issue"},
+  {"id": "easy-docs", "expected": "middle", "condition": "easy low-value documentation"},
+  {"id": "architecture", "expected": "low", "condition": "exciting unresolved architecture"},
+  {"id": "claimed", "expected": "low", "condition": "explicit recent claim"},
+  {"id": "revived", "expected": "middle", "condition": "stale issue revived by maintainer"},
+  {"id": "strong-history", "expected": "high", "condition": "strong external merge history"},
+  {"id": "no-history", "expected": "low-confidence", "condition": "no repository history"},
+  {"id": "active-pr", "expected": "excluded", "condition": "active credibly linked PR"},
+  {"id": "new-guidance", "expected": "middle", "condition": "old failed PR plus new guidance"},
+  {"id": "hardware", "expected": "low", "condition": "required hardware unavailable"}
+]

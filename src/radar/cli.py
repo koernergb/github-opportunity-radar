@@ -1,6 +1,8 @@
 """Command-line interface for GitHub Opportunity Radar."""
 
 import asyncio
+import json
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -8,10 +10,13 @@ import typer
 from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from radar import __version__
+from radar.analysis.analyze import analyze_issue
 from radar.clock import SystemClock
+from radar.db.models import Issue, IssueFilterResult, IssueScore, Repository
 from radar.db.session import (
     create_database_engine,
     create_session_factory,
@@ -35,6 +40,8 @@ from radar.ingestion.pull_requests import sync_pull_request_history
 from radar.ingestion.repositories import RepositorySyncSummary, sync_repositories
 from radar.metrics.repository_health import calculate_repository_metrics
 from radar.pipeline.orchestrator import PipelineLockedError, PipelineOutcome, run_pipeline
+from radar.scoring.engine import SCORE_VERSION, rank_scores
+from radar.scoring.explanations import explain_score
 from radar.settings import (
     ConfigLoadError,
     EnvironmentSettings,
@@ -104,13 +111,42 @@ def doctor(
         bool,
         typer.Option("--github", help="Check authenticated GitHub API access."),
     ] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile to diagnose."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="Database URL to diagnose."),
+    ] = None,
 ) -> None:
     """Check local prerequisites and optional live integrations."""
+    environment = EnvironmentSettings()
+    configured_path = config or environment.radar_config
+    diagnostic_path = configured_path
+    if not configured_path.exists() and config is None:
+        diagnostic_path = Path("config/profile.example.yaml")
+        console.print(
+            f"[yellow]Profile missing:[/] {configured_path}; copy config/profile.example.yaml first"
+        )
+    try:
+        loaded = load_config(diagnostic_path)
+    except (ConfigLoadError, ValidationError) as error:
+        error_console.print(f"[red]Configuration check failed:[/] {error}")
+        raise typer.Exit(code=2) from error
+    console.print(
+        f"[green]Configuration is valid.[/] {diagnostic_path} "
+        f"({len(loaded.repositories)} repositories)"
+    )
+    _diagnose_database(database_url or environment.radar_database_url)
+    if environment.openai_api_key:
+        console.print("[green]OPENAI_API_KEY is configured.[/]")
+    else:
+        console.print("[yellow]OPENAI_API_KEY is absent; deterministic fallback will be used.[/]")
+    console.print("[green]Local configuration support is available.[/]")
     if not github:
-        console.print("[green]Local configuration support is available.[/]")
         return
 
-    environment = EnvironmentSettings()
     if not environment.github_token:
         error_console.print("[red]GitHub check failed:[/] GITHUB_TOKEN is not configured")
         raise typer.Exit(code=3)
@@ -131,6 +167,22 @@ def doctor(
         "[green]GitHub API access is healthy.[/] "
         f"Core rate limit: {rate_limit.core.remaining}/{rate_limit.core.limit}"
     )
+
+
+def _diagnose_database(database_url: str) -> None:
+    """Check local database path safety without creating or changing a database."""
+    if database_url.startswith("sqlite:///"):
+        database_path = Path(database_url.removeprefix("sqlite:///"))
+        parent = database_path.parent
+        while not parent.exists() and parent != parent.parent:
+            parent = parent.parent
+        if not parent.is_dir() or not os.access(parent, os.W_OK):
+            raise typer.BadParameter(
+                f"database directory is not writable: {parent}", param_hint="--database-url"
+            )
+        console.print(f"[green]Database path is writable.[/] {database_path}")
+        return
+    console.print("[yellow]Database connectivity not checked for non-SQLite URL.[/]")
 
 
 @app.command("digest")
@@ -476,6 +528,141 @@ def apply_filters(
         f"eligible={counts['eligible']} warning={counts['warning']} "
         f"excluded={counts['excluded']}"
     )
+
+
+@app.command("analyze")
+def analyze_candidates(
+    repository: Annotated[
+        str | None,
+        typer.Option("--repo", help="Limit analysis to owner/repository."),
+    ] = None,
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", min=1, help="Maximum candidates for this invocation."),
+    ] = None,
+    fallback_only: Annotated[
+        bool,
+        typer.Option("--fallback-only", help="Skip OpenAI and use deterministic fallback."),
+    ] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Analyze eligible issues using cached structured or fallback features."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    factory = create_session_factory(create_database_engine(url))
+    maximum = min(limit or settings.llm.max_candidates_per_run, settings.llm.max_candidates_per_run)
+    with factory() as session:
+        statement = (
+            select(Issue.id)
+            .join(Repository)
+            .join(IssueFilterResult, IssueFilterResult.issue_id == Issue.id)
+            .where(IssueFilterResult.status.in_({"eligible", "warning"}))
+            .order_by(Repository.full_name, Issue.number)
+        )
+        if repository is not None:
+            statement = statement.where(Repository.full_name == repository)
+        issue_ids = list(session.scalars(statement).all())[:maximum]
+    statuses: dict[str, int] = {"success": 0, "fallback": 0}
+    for issue_id in issue_ids:
+        with factory.begin() as session:
+            analysis = analyze_issue(
+                session,
+                issue_id=issue_id,
+                config=settings,
+                clock=SystemClock(),
+                api_key=environment.openai_api_key,
+                fallback_only=fallback_only,
+            )
+            statuses[analysis.status] = statuses.get(analysis.status, 0) + 1
+    console.print(
+        "[green]Analysis complete.[/] "
+        f"candidates={len(issue_ids)} success={statuses['success']} fallback={statuses['fallback']}"
+    )
+
+
+@app.command("rank")
+def show_ranked(
+    top: Annotated[int, typer.Option("--top", min=1, help="Maximum rows to display.")] = 10,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Show current-profile eligible scores in deterministic order."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    factory = create_session_factory(create_database_engine(url))
+    table = Table("Rank", "Score", "Confidence", "Opportunity", "Merge")
+    with factory() as session:
+        scores = rank_scores(
+            session,
+            limit=top,
+            score_version=SCORE_VERSION,
+            profile_hash=settings.profile_hash,
+        )
+        for rank, score in enumerate(scores, start=1):
+            issue = session.get(Issue, score.issue_id)
+            assert issue is not None
+            repository = session.get(Repository, issue.repository_id)
+            assert repository is not None
+            table.add_row(
+                str(rank),
+                f"{score.total:.1f}",
+                f"{score.confidence:.0%}",
+                f"{repository.full_name}#{issue.number} — {issue.title}",
+                f"{score.merge_band} ({score.merge_estimate:.0%}) heuristic",
+            )
+    console.print(table)
+
+
+@app.command("explain")
+def explain_candidate(
+    issue_reference: Annotated[str, typer.Argument(help="Issue as owner/repository#number.")],
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to the YAML profile."),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option("--database-url", help="SQLAlchemy database URL."),
+    ] = None,
+) -> None:
+    """Print the persisted versioned score explanation for one issue."""
+    settings, _ = _load_cli_config(config)
+    environment = EnvironmentSettings()
+    url = database_url or environment.radar_database_url
+    migrate_database(url)
+    factory = create_session_factory(create_database_engine(url))
+    with factory() as session:
+        try:
+            issue = resolve_issue_reference(session, issue_reference)
+        except FeedbackValidationError as error:
+            raise typer.BadParameter(str(error)) from error
+        score = session.scalar(
+            select(IssueScore).where(
+                IssueScore.issue_id == issue.id,
+                IssueScore.score_version == SCORE_VERSION,
+                IssueScore.profile_hash == settings.profile_hash,
+            )
+        )
+        if score is None:
+            raise typer.BadParameter("no current score; run analyze and score via radar run")
+        typer.echo(json.dumps(explain_score(score), indent=2, sort_keys=True))
 
 
 @app.command("run")
