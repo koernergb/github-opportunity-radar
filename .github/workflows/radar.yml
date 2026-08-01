@@ -1,0 +1,52 @@
+name: Opportunity radar
+
+on:
+  schedule:
+    - cron: "17 12 * * 1,3,5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opportunity-radar-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      RADAR_CONFIG: config/profile.example.yaml
+      RADAR_DATABASE_URL: sqlite:///data/radar.sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install locked dependencies
+        run: uv sync --all-extras --locked
+      - name: Run read-only opportunity radar
+        id: radar
+        shell: bash
+        run: |
+          set +e
+          uv run radar run > digest.md
+          radar_exit=$?
+          echo "exit_code=${radar_exit}" >> "${GITHUB_OUTPUT}"
+          exit 0
+      - name: Upload deterministic digest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opportunity-radar-digest-${{ github.run_id }}
+          path: digest.md
+          if-no-files-found: error
+          retention-days: 14
+      - name: Propagate radar failure
+        if: steps.radar.outputs.exit_code != '0'
+        run: exit 1
