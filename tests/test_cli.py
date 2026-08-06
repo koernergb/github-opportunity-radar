@@ -92,6 +92,34 @@ def test_init_db_migrates_database_to_head(tmp_path: Path) -> None:
     assert (tmp_path / "radar.sqlite").exists()
 
 
+def test_web_runs_factory_with_environment_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fake_run(*args: object, **kwargs: object) -> None:
+        calls.append((args, kwargs))
+
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", fake_run)
+    monkeypatch.setenv("RADAR_WEB_HOST", "127.0.0.2")
+    monkeypatch.setenv("RADAR_WEB_PORT", "8765")
+
+    result = runner.invoke(app, ["web"])
+
+    assert result.exit_code == 0
+    assert calls == [
+        (
+            ("radar.api.app:create_default_app",),
+            {
+                "factory": True,
+                "host": "127.0.0.2",
+                "port": 8765,
+                "reload": False,
+            },
+        )
+    ]
+
+
 def test_doctor_without_live_check_is_offline() -> None:
     result = runner.invoke(app, ["doctor"])
 

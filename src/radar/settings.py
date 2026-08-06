@@ -172,6 +172,16 @@ class EnvironmentSettings(BaseSettings):
     openai_api_key: str | None = None
     radar_config: Path = Path("config/profile.yaml")
     radar_database_url: str = "sqlite:///data/radar.sqlite"
+    radar_web_host: str = "127.0.0.1"
+    radar_web_port: Annotated[int, Field(ge=1, le=65535)] = 8000
+    radar_web_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+
+    @property
+    def web_origins(self) -> tuple[str, ...]:
+        """Return normalized, non-empty browser origins."""
+        return tuple(
+            origin.strip() for origin in self.radar_web_origins.split(",") if origin.strip()
+        )
 
 
 def canonical_hash(value: Any) -> str:

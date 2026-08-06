@@ -42,6 +42,18 @@ def test_example_loads_without_github_token(monkeypatch: pytest.MonkeyPatch) -> 
     assert environment.github_token is None
 
 
+def test_environment_settings_normalize_web_origins() -> None:
+    environment = EnvironmentSettings(
+        _env_file=None,
+        radar_web_origins="http://localhost:5173, http://127.0.0.1:5173,",
+    )
+
+    assert environment.web_origins == (
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    )
+
+
 def test_unknown_keys_fail(tmp_path: Path) -> None:
     data = _example_data()
     data["unexpected"] = True

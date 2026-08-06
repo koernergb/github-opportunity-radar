@@ -106,6 +106,34 @@ def init_db(
 
 
 @app.command()
+def web(
+    host: Annotated[
+        str | None,
+        typer.Option("--host", help="Local interface on which the web server listens."),
+    ] = None,
+    port: Annotated[
+        int | None,
+        typer.Option("--port", min=1, max=65535, help="Local web server port."),
+    ] = None,
+    reload: Annotated[
+        bool,
+        typer.Option("--reload", help="Reload the server when source files change."),
+    ] = False,
+) -> None:
+    """Run the local Radar web application."""
+    import uvicorn
+
+    environment = EnvironmentSettings()
+    uvicorn.run(
+        "radar.api.app:create_default_app",
+        factory=True,
+        host=host or environment.radar_web_host,
+        port=port or environment.radar_web_port,
+        reload=reload,
+    )
+
+
+@app.command()
 def doctor(
     github: Annotated[
         bool,
