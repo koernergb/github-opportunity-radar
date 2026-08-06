@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from radar.api.app import API_PREFIX, create_app
 from radar.api.errors import ApiError
+from radar.db.models import Base
 from radar.db.session import create_session_factory
 from radar.settings import ConfigLoadError, EnvironmentSettings, load_config
 
@@ -27,6 +28,7 @@ def _app(
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    Base.metadata.create_all(engine)
     environment = EnvironmentSettings(
         _env_file=None,
         github_token="github-secret",

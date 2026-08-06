@@ -21,6 +21,8 @@ from radar.db.session import (
 
 EXPECTED_TABLES = {
     "alembic_version",
+    "config_activations",
+    "config_revisions",
     "etag_cache",
     "issue_analyses",
     "issue_assignees",
@@ -109,7 +111,7 @@ def test_migrate_zero_to_head_creates_complete_schema(tmp_path: Path) -> None:
     assert set(inspect(engine).get_table_names()) == EXPECTED_TABLES
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-            "0001_initial_schema"
+            "0002_config_revisions"
         )
 
 

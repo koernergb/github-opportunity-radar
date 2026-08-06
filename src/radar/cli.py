@@ -11,11 +11,13 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from radar import __version__
 from radar.analysis.analyze import analyze_issue
 from radar.clock import SystemClock
+from radar.config_store import SqlAlchemyConfigurationStore
 from radar.db.models import Issue, IssueFilterResult, IssueScore, Repository
 from radar.db.session import (
     create_database_engine,
@@ -754,6 +756,16 @@ def _load_cli_config(config: Path | None) -> tuple[RadarConfig, Path]:
     environment = EnvironmentSettings()
     path = config or environment.radar_config
     try:
+        if config is None:
+            sessions = create_session_factory(
+                create_database_engine(environment.radar_database_url)
+            )
+            try:
+                active = SqlAlchemyConfigurationStore(sessions, SystemClock()).active_config()
+            except SQLAlchemyError:
+                active = None
+            if active is not None:
+                return active, path
         return load_config(path), path
     except ConfigLoadError as error:
         error_console.print(f"[red]Configuration error:[/] {error}")

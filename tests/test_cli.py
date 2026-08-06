@@ -9,10 +9,14 @@ from typer.testing import CliRunner
 import radar.cli as cli_module
 from radar import __version__
 from radar.cli import app
+from radar.clock import SystemClock
+from radar.config_store import SqlAlchemyConfigurationStore
+from radar.db.session import create_database_engine, create_session_factory, migrate_database
 from radar.domain.errors import AuthenticationError
 from radar.domain.schemas import RateLimitDTO, RateLimitWindowDTO
 from radar.ingestion.issues import IssueSyncSummary
 from radar.ingestion.repositories import RepositorySyncSummary
+from radar.settings import load_config
 
 runner = CliRunner()
 
@@ -118,6 +122,26 @@ def test_web_runs_factory_with_environment_defaults(monkeypatch: pytest.MonkeyPa
             },
         )
     ]
+
+
+def test_cli_resolves_the_same_active_configuration_as_web_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'radar.sqlite'}"
+    migrate_database(database_url)
+    store = SqlAlchemyConfigurationStore(
+        create_session_factory(create_database_engine(database_url)), SystemClock()
+    )
+    payload = load_config(Path("config/profile.example.yaml")).model_dump(mode="json")
+    payload["user"]["interests"] = ["active-revision"]
+    revision = store.create_revision(payload, source="manual", summary="Active web preferences")
+    store.activate(revision.id, expected_active_id=None)
+    monkeypatch.setenv("RADAR_DATABASE_URL", database_url)
+
+    result = runner.invoke(app, ["validate-config"])
+
+    assert result.exit_code == 0
+    assert revision.config_hash in result.output
 
 
 def test_doctor_without_live_check_is_offline() -> None:

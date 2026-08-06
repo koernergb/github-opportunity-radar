@@ -424,3 +424,38 @@ class UserFeedback(UUIDPrimaryKey, Base):
     note: Mapped[str | None] = mapped_column(Text)
     pr_url: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class ConfigRevision(UUIDPrimaryKey, Base):
+    """Immutable, non-secret configuration candidate."""
+
+    __tablename__ = "config_revisions"
+
+    schema_version: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[JsonObject] = mapped_column(JSON)
+    yaml_text: Mapped[str] = mapped_column(Text)
+    valid: Mapped[bool]
+    validation_errors: Mapped[list[JsonObject]] = mapped_column(JSON, default=list)
+    config_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    profile_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    source: Mapped[str] = mapped_column(String(32))
+    summary: Mapped[str] = mapped_column(Text)
+    supersedes_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("config_revisions.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class ConfigActivation(UUIDPrimaryKey, Base):
+    """Append-only selection history for active configuration revisions."""
+
+    __tablename__ = "config_activations"
+    __table_args__ = (Index("ix_config_activations_created", "created_at", "id"),)
+
+    revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("config_revisions.id", ondelete="RESTRICT"), index=True
+    )
+    previous_revision_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("config_revisions.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
