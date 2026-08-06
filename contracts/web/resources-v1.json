@@ -1,0 +1,13 @@
+{
+  "version": "web_resources_v1",
+  "resources": {
+    "opportunity_summary": ["issue_id", "repository", "number", "title", "url", "score", "confidence", "effort_low_hours", "effort_high_hours", "fit", "merge_estimate", "merge_band", "merge_is_heuristic", "warnings", "updated_at", "scored_at"],
+    "opportunity_detail": ["summary", "body_text", "labels", "assignees", "comments", "linked_pull_requests", "repository_health", "analysis", "explanation", "feedback"],
+    "repository_summary": ["repository_id", "full_name", "enabled", "primary_language", "candidate_count", "last_synced_at", "health", "sync_status"],
+    "config_revision": ["revision_id", "config_hash", "profile_hash", "source", "summary", "created_at", "activated_at", "supersedes_id"],
+    "pipeline_run": ["run_id", "status", "current_stage", "started_at", "finished_at", "summary", "event_cursor"],
+    "conversation": ["conversation_id", "title", "created_at", "updated_at", "message_count"],
+    "assistant_proposal": ["proposal_id", "kind", "status", "arguments", "before", "after", "created_at", "expires_at", "applied_at"]
+  },
+  "forbidden_fields": ["raw_json", "raw_payload", "github_token", "openai_api_key", "authorization"]
+}

@@ -212,10 +212,223 @@ Acceptance:
 - merge estimate clearly called heuristic,
 - `doctor` catches common failures.
 
+## Web UI Phase
+
+Build a local-first, single-user web application in this monorepo. Keep the existing
+Python pipeline and deterministic scoring engine authoritative. Add a React/TypeScript
+frontend under `web/` and a FastAPI layer under `src/radar/api/`.
+
+Web configuration uses immutable database revisions as its active source of truth, with
+validated YAML import/export for CLI compatibility. Assistant-driven repository or
+preference changes always require explicit confirmation. GitHub remains read-only.
+Repository, issue, comment, and document text remains untrusted data and can never invoke
+assistant tools.
+
+Required web quality gates:
+
+```bash
+ruff check .
+ruff format --check .
+mypy src
+pytest --cov=radar --cov-report=term-missing --cov-fail-under=85
+npm run lint --prefix web
+npm run typecheck --prefix web
+npm run test --prefix web
+npm run test:e2e --prefix web
+```
+
+## UI-00 — Architecture, contracts, and visual foundation
+
+Define the web architecture, route inventory, API resource shapes, configuration
+ownership, assistant approval policy, threat boundaries, responsive layouts, navigation,
+design tokens, and reviewed wireframes for Home, Assistant, Opportunities, Repositories,
+Preferences, Runs, and Settings. Record decisions in ADRs and add machine-checked contract
+fixtures that later cards must implement.
+
+Acceptance:
+- the existing CLI and pipeline remain authoritative and supported,
+- local single-user deployment and the `web/` monorepo layout are explicit,
+- every API operation is classified as read, local mutation, expensive run, or forbidden,
+- GitHub mutations remain unavailable,
+- issue and repository text is explicitly unable to authorize or invoke tools,
+- configuration source-of-truth and YAML import/export behavior are unambiguous,
+- responsive and keyboard-navigation expectations are documented,
+- API/route and design-token contract fixtures are validated by tests.
+
+## UI-01 — FastAPI foundation
+
+Implement a FastAPI application factory, versioned `/api/v1` router, dependency injection
+for sessions/config/environment/clock, health and readiness endpoints, local-development
+CORS, structured API errors, OpenAPI generation, static production asset hooks, and a
+`radar web` command using Uvicorn.
+
+Acceptance:
+- the API boots against temporary SQLite and PostgreSQL-compatible models,
+- health distinguishes process health from config/database readiness,
+- secrets are represented only as configured/missing/invalid states,
+- errors have stable codes and never expose secrets or raw exception details,
+- CORS defaults to local origins and is configurable,
+- OpenAPI output is deterministic and snapshot-tested,
+- CLI behavior and all existing quality gates remain unchanged.
+
+## UI-02 — Configuration revisions
+
+Add immutable configuration revisions, active-revision selection, YAML bootstrap/import/
+export, validation previews, activation, undo, provenance, summaries, and optimistic
+concurrency. Introduce a configuration-store interface so CLI, API, scheduler, assistant,
+and pipeline all resolve the same validated `RadarConfig` semantics.
+
+Acceptance:
+- every edit creates a revision; no revision is overwritten,
+- invalid configuration can be previewed but cannot be activated,
+- stale concurrent writes are rejected with a stable conflict response,
+- undo activates an exact prior hash without deleting history,
+- first web startup can bootstrap from `config/profile.yaml`,
+- active configuration exports to deterministic valid YAML,
+- secrets never enter configuration revisions,
+- CLI and web resolve equivalent active configuration in integration tests.
+
+## UI-03 — Read APIs
+
+Implement typed APIs for dashboard summaries, paginated/filterable opportunities,
+opportunity detail and explanation, repositories and health, pipeline runs/events, and
+append-only feedback. Add explicit serializers/projections instead of returning ORM or raw
+GitHub payloads.
+
+Acceptance:
+- excluded issues are absent by default and require an explicit diagnostic filter,
+- opportunity ordering matches the deterministic scoring engine,
+- pagination and tie-breaking are stable,
+- all heuristic merge estimates are labeled as heuristic,
+- missing evidence and confidence remain explicit,
+- serializers never recompute scores or leak raw payloads,
+- query-count tests prevent N+1 regressions,
+- API integration tests cover empty, partial, stale, and low-confidence states.
+
+## UI-04 — React application foundation
+
+Create the Vite React/TypeScript application with strict TypeScript, React Router,
+TanStack Query, generated/validated API types, Tailwind design tokens, accessible Radix
+primitives, dark/light themes, Cursor-style sidebar, command palette, route-level loading/
+empty/error boundaries, and Mock Service Worker fixtures.
+
+Acceptance:
+- Home, Assistant, Opportunities, Repositories, Preferences, Runs, and Settings routes load,
+- navigation and primary actions are fully keyboard accessible,
+- desktop and tablet layouts meet the UI-00 responsive contracts,
+- secrets never enter the frontend bundle or browser storage,
+- API loading, empty, partial, offline, and error states are covered,
+- frontend lint, strict typecheck, unit tests, and accessibility tests pass,
+- production assets build reproducibly and can be served by FastAPI.
+
+## UI-05 — Opportunities experience
+
+Implement the ranked issue table, server-side filters, URL-backed query state, confidence/
+effort/fit/heuristic-merge indicators, new-and-changed markers, claim/assignee/active-PR
+warnings, saved views, and a right-side detail inspector containing evidence, repository
+health, linked PRs, risks, suggested first move, investigation steps, feedback, and the
+complete score explanation.
+
+Acceptance:
+- displayed order and filters match backend results exactly,
+- active linked PR and credible claim evidence are prominent,
+- merge likelihood is always labeled heuristic,
+- low confidence and missing data cannot be hidden by visual styling,
+- opening/closing an inspector preserves table filters and scroll position,
+- issue text is rendered safely without executable HTML,
+- feedback appends without altering observed GitHub facts,
+- reviewed Playwright and accessibility flows pass.
+
+## UI-06 — Repositories and preferences
+
+Implement tracked-repository management, repository health/detail screens, structured
+preference forms, scoring-weight controls, per-repository overrides, validation previews,
+revision history, before/after diffs, activation, undo, and YAML import/export.
+
+Acceptance:
+- adding, disabling, and editing a repository creates config revisions,
+- repository actions never write to GitHub,
+- scoring weights and all strict config constraints are validated before activation,
+- the browser never writes arbitrary files or paths,
+- undo restores the exact prior config/profile hashes,
+- revision provenance distinguishes manual, assistant, and imported changes,
+- form and YAML round trips preserve semantics,
+- concurrent-edit conflict and recovery flows are tested end to end.
+
+## UI-07 — Runs, background execution, and live progress
+
+Add a bounded background-run service around the existing orchestrator, start/cancel-safe
+API contracts, Server-Sent Events for progress, reconnect/resume cursors, run list/detail,
+stage timelines, per-repository status, budgets, cache/fallback counts, diagnostics, digest
+download, and safe retry of failed repositories.
+
+Acceptance:
+- the existing single-run lock prevents overlapping API, CLI, and scheduled runs,
+- starting a run returns immediately with a durable run ID,
+- refresh/reconnect resumes events without duplication or loss,
+- deadline, authentication, partial failure, and repository isolation are visible,
+- cancellation stops only at documented safe boundaries and preserves committed work,
+- retries do not duplicate observations or derived artifacts,
+- completed web output matches the CLI pipeline for identical inputs,
+- streaming and reconnect behavior is integration-tested.
+
+## UI-08 — Read-only assistant
+
+Implement versioned assistant prompts/schemas, conversation/message persistence, a bounded
+OpenAI Responses API streaming adapter, usage/error metadata, and read-only typed tools for
+searching, inspecting, comparing, and explaining opportunities, repositories, and runs.
+Keep this provider and cache separate from issue semantic analysis.
+
+Acceptance:
+- assistant answers are grounded only in stored radar data returned by typed tools,
+- repository and issue text cannot select, authorize, or invoke a tool,
+- only read-only tools are exposed in this card,
+- every tool call has validated bounded arguments and persisted provenance,
+- conversation, tool, token, and time budgets are enforced,
+- refresh resumes persisted conversations without relying solely on provider state,
+- missing API key produces a clear unavailable state without breaking the rest of the UI,
+- prompt-injection, tool-confusion, malformed-output, timeout, and streaming tests pass.
+
+## UI-09 — Conversational repository and preference changes
+
+Add assistant tools that create validated repository/preference change proposals, plus
+preview, diff, confirm, reject, expire, apply, audit, and undo flows. Separate proposal
+creation from application so the model cannot confirm or apply its own action.
+
+Acceptance:
+- all assistant mutations require an explicit user confirmation tied to exact arguments,
+- the model has no direct apply/activate database capability,
+- stale, altered, expired, replayed, and already-used confirmations fail safely,
+- applying a proposal creates an immutable config revision with assistant provenance,
+- rejected proposals have no configuration effect,
+- expensive pipeline runs require a separate scope/budget confirmation,
+- GitHub mutation requests are refused as unavailable in v1,
+- adversarial conversation and end-to-end confirmation/undo tests pass.
+
+## UI-10 — Home, scheduling, durability, and web release readiness
+
+Implement the Home dashboard, new/materially-changed issue summaries, next/last run state,
+local scheduling controls, production frontend serving, durable scheduled-run state,
+documentation, screenshots, accessibility/performance review, and a fresh-clone web
+walkthrough. Keep GitHub Actions as an optional unattended mode with explicit state restore/
+save behavior; a missing prior state performs a safe full sync.
+
+Acceptance:
+- Home shows top opportunities, changes, tracked-repository health, and run status,
+- local schedules use the configured timezone and survive process restarts,
+- scheduled runs cannot overlap manual or CLI runs,
+- unattended runs preserve cursors, analyses, scores, and run history across executions,
+- state persistence never uploads secrets or unintended local feedback/configuration,
+- missing/expired/corrupt scheduled state falls back safely and visibly,
+- FastAPI serves the production React build with deep-link fallback,
+- fresh-clone local web setup and fixture demo succeed,
+- WCAG-oriented accessibility, production build, backend, frontend, and E2E gates pass,
+- UI architecture, operations, troubleshooting, security, and assistant limitations are documented.
+
 ## Optional Phase 2
 
 18. Notification adapters: email, Discord, Slack, generic webhook.
 19. GraphQL gateway adapter with cost/node visibility.
 20. Similar historical PR retrieval.
 21. Time-split calibrated merge model with no post-outcome leakage.
-22. Read-only FastAPI/HTMX local dashboard.
+22. Notification delivery from the web UI with explicit destination confirmation.
