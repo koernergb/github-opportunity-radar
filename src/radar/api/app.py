@@ -14,6 +14,7 @@ from radar.api.dependencies import ApiServices
 from radar.api.errors import install_error_handlers
 from radar.api.routes.health import router as health_router
 from radar.api.routes.preferences import router as preferences_router
+from radar.api.routes.read import router as read_router
 from radar.clock import Clock, SystemClock
 from radar.config_store import SqlAlchemyConfigurationStore
 from radar.db.session import create_database_engine, create_session_factory, migrate_database
@@ -68,6 +69,7 @@ def create_app(
     api = APIRouter(prefix=API_PREFIX)
     api.include_router(health_router)
     api.include_router(preferences_router)
+    api.include_router(read_router)
     app.include_router(api)
     install_error_handlers(app)
 
