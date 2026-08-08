@@ -47,3 +47,14 @@ test("preference conflict is explicit and recoverable", async ({ page }) => {
   await page.getByRole("button", { name: "Reload active revision" }).click();
   await expect(page.getByText("Contribution fit")).toBeVisible();
 });
+
+test("completed run timeline remains available after refresh", async ({ page }) => {
+  const run = { run_id: "00000000-0000-0000-0000-000000000030", status: "partial", current_stage: null, started_at: "2026-08-08T12:00:00Z", finished_at: "2026-08-08T12:01:00Z", summary: { stage_failures: ["deadline"], repositories_failed: 1 }, event_cursor: "2026-08-08T12:01:00Z" };
+  await page.route("**/api/v1/runs", (route) => route.fulfill({ json: [run] }));
+  await page.route("**/api/v1/runs/*/events", (route) => route.fulfill({ json: [{ event_id: "00000000-0000-0000-0000-000000000031", stage: "analyze_score", event_type: "stage_started", level: "info", message: "Started analyze_score", error_type: null, details: {}, created_at: "2026-08-08T12:00:30Z" }] }));
+  await page.goto("/runs");
+  await expect(page.getByText("Started analyze_score")).toBeVisible();
+  await expect(page.getByText(/deadline/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Started analyze_score")).toBeVisible();
+});

@@ -15,9 +15,11 @@ from radar.api.errors import install_error_handlers
 from radar.api.routes.health import router as health_router
 from radar.api.routes.preferences import router as preferences_router
 from radar.api.routes.read import router as read_router
+from radar.api.routes.runs import router as runs_router
 from radar.clock import Clock, SystemClock
 from radar.config_store import SqlAlchemyConfigurationStore
 from radar.db.session import create_database_engine, create_session_factory, migrate_database
+from radar.pipeline.background import BackgroundRunCoordinator
 from radar.settings import ConfigLoadError, EnvironmentSettings, RadarConfig, load_config
 
 API_PREFIX = "/api/v1"
@@ -49,6 +51,7 @@ def create_app(
         clock=clock or SystemClock(),
         static_dir=static_dir,
     )
+    app.state.run_coordinator = BackgroundRunCoordinator(sessions, app.state.services.clock)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(allowed_origins),
@@ -70,6 +73,7 @@ def create_app(
     api.include_router(health_router)
     api.include_router(preferences_router)
     api.include_router(read_router)
+    api.include_router(runs_router)
     app.include_router(api)
     install_error_handlers(app)
 

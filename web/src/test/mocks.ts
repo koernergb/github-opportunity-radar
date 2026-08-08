@@ -26,6 +26,9 @@ export const handlers = [
   http.post("/api/v1/preferences/revisions/:revisionId/activate", () => HttpResponse.json({ revision, config })),
   http.get("/api/v1/preferences/export", () => new HttpResponse("version: 1\n", { headers: { "Content-Type": "application/yaml" } })),
   http.get("/api/v1/repositories", () => HttpResponse.json([{ repository_id: "00000000-0000-0000-0000-000000000020", full_name: "ml-explore/mlx", enabled: true, primary_language: "C++", candidate_count: 4, last_synced_at: "2026-08-08T12:00:00Z", health: null, sync_status: "current" }])),
+  http.get("/api/v1/runs", () => HttpResponse.json([{ run_id: "00000000-0000-0000-0000-000000000030", status: "success", current_stage: null, started_at: "2026-08-08T12:00:00Z", finished_at: "2026-08-08T12:01:00Z", summary: { scored: 4 }, event_cursor: "2026-08-08T12:01:00Z" }])),
+  http.get("/api/v1/runs/:runId/events", () => HttpResponse.json([{ event_id: "00000000-0000-0000-0000-000000000031", stage: "digest", event_type: "stage_started", level: "info", message: "Started digest", error_type: null, details: {}, created_at: "2026-08-08T12:00:30Z" }])),
+  http.post("/api/v1/runs", () => HttpResponse.json({ run_id: "00000000-0000-0000-0000-000000000032", status: "queued" }, { status: 202 })),
   http.get("/api/v1/health", () => HttpResponse.json({ status: "ok", version: "0.1.0" })),
   http.get("/api/v1/readiness", () =>
     HttpResponse.json({

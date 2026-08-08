@@ -23,6 +23,8 @@
     {"method": "POST", "path": "/runs", "class": "expensive_run", "confirmation": "scope_and_budget"},
     {"method": "GET", "path": "/runs/{run_id}", "class": "read", "confirmation": "none"},
     {"method": "GET", "path": "/runs/{run_id}/events", "class": "read", "confirmation": "none"},
+    {"method": "GET", "path": "/runs/{run_id}/stream", "class": "read", "confirmation": "none"},
+    {"method": "POST", "path": "/runs/{run_id}/cancel", "class": "local_mutation", "confirmation": "direct_user_action"},
     {"method": "GET", "path": "/conversations", "class": "read", "confirmation": "none"},
     {"method": "POST", "path": "/conversations", "class": "local_mutation", "confirmation": "direct_user_action"},
     {"method": "GET", "path": "/conversations/{conversation_id}", "class": "read", "confirmation": "none"},

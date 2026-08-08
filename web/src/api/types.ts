@@ -55,3 +55,7 @@ export const preferencesSchema = z.object({ revision: revisionSchema, config: z.
 export const repositorySchema = z.object({ repository_id: z.string(), full_name: z.string(), enabled: z.boolean(), primary_language: z.string().nullable(), candidate_count: z.number(), last_synced_at: z.string(), health: z.record(z.string(), z.unknown()).nullable(), sync_status: z.enum(["current", "stale"]) });
 export const repositoriesSchema = z.array(repositorySchema);
 export type Revision = z.infer<typeof revisionSchema>;
+export const runSchema = z.object({ run_id: z.string(), status: z.string(), current_stage: z.string().nullable(), started_at: z.string(), finished_at: z.string().nullable(), summary: z.record(z.string(), z.unknown()), event_cursor: z.string().nullable() });
+export const runsSchema = z.array(runSchema);
+export const runEventSchema = z.object({ event_id: z.string(), stage: z.string(), event_type: z.string(), level: z.string(), message: z.string(), error_type: z.string().nullable(), details: z.record(z.string(), z.unknown()), created_at: z.string() });
+export type Run = z.infer<typeof runSchema>;
