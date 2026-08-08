@@ -487,6 +487,20 @@ class AssistantChangeProposal(UUIDPrimaryKey, Base):
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
+class LocalSchedule(UUIDPrimaryKey, Base):
+    """Durable single-user local schedule state."""
+
+    __tablename__ = "local_schedules"
+
+    enabled: Mapped[bool]
+    interval_minutes: Mapped[int]
+    timezone: Mapped[str] = mapped_column(String(128))
+    next_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    last_attempt_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    last_status: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
 class Conversation(UUIDPrimaryKey, Base):
     """Persisted local assistant conversation independent of provider state."""
 

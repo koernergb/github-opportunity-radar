@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from radar.api.dependencies import Services
 from radar.api.errors import ApiError
+from radar.config_store import SqlAlchemyConfigurationStore
 from radar.db.models import PipelineRun, RunEvent
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
@@ -47,12 +48,15 @@ class CancelResponse(BaseModel):
 async def start_run(
     body: StartRunRequest, request: Request, services: Services
 ) -> StartRunResponse:
-    if services.config is None:
+    config = (
+        SqlAlchemyConfigurationStore(services.sessions, services.clock).active_config()
+        or services.config
+    )
+    if config is None:
         raise ApiError(503, "config_unavailable", "An active valid configuration is required.")
     if not services.environment.github_token:
         raise ApiError(503, "github_unavailable", "GitHub credentials are not configured.")
     coordinator: BackgroundRunCoordinator = request.app.state.run_coordinator
-    config = services.config
     try:
         run_id = coordinator.reserve(
             config.config_hash,

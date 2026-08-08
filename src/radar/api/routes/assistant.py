@@ -21,6 +21,7 @@ from radar.assistant.service import (
     list_conversations,
     run_assistant_turn,
 )
+from radar.config_store import SqlAlchemyConfigurationStore
 
 router = APIRouter(prefix="/conversations", tags=["assistant"])
 
@@ -114,9 +115,12 @@ async def send_message(
     request: Request,
     services: Services,
 ) -> StreamingResponse:
-    if services.config is None:
+    config = (
+        SqlAlchemyConfigurationStore(services.sessions, services.clock).active_config()
+        or services.config
+    )
+    if config is None:
         raise ApiError(503, "config_unavailable", "An active valid configuration is required.")
-    config = services.config
     provider: AssistantProvider | None = getattr(request.app.state, "assistant_provider", None)
     if provider is None:
         if not services.environment.openai_api_key:

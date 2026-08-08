@@ -29,8 +29,13 @@
     {"method": "POST", "path": "/conversations", "class": "local_mutation", "confirmation": "direct_user_action"},
     {"method": "GET", "path": "/conversations/{conversation_id}", "class": "read", "confirmation": "none"},
     {"method": "POST", "path": "/conversations/{conversation_id}/messages", "class": "local_mutation", "confirmation": "direct_user_action"},
-    {"method": "POST", "path": "/proposals/{proposal_id}/apply", "class": "local_mutation", "confirmation": "exact_proposal"},
-    {"method": "POST", "path": "/proposals/{proposal_id}/reject", "class": "local_mutation", "confirmation": "exact_proposal"},
+    {"method": "GET", "path": "/assistant/proposals/{conversation_id}", "class": "read", "confirmation": "none"},
+    {"method": "POST", "path": "/assistant/proposals/{proposal_id}/confirm", "class": "local_mutation", "confirmation": "exact_proposal"},
+    {"method": "POST", "path": "/assistant/proposals/{proposal_id}/reject", "class": "local_mutation", "confirmation": "exact_proposal"},
+    {"method": "POST", "path": "/assistant/proposals/{proposal_id}/undo", "class": "local_mutation", "confirmation": "direct_user_action"},
+    {"method": "POST", "path": "/assistant/proposals/{proposal_id}/confirm-run", "class": "expensive_run", "confirmation": "scope_and_budget"},
+    {"method": "GET", "path": "/schedule", "class": "read", "confirmation": "none"},
+    {"method": "PUT", "path": "/schedule", "class": "local_mutation", "confirmation": "direct_user_action"},
     {"method": "POST", "path": "/github/issues/{issue_id}/comment", "class": "forbidden", "confirmation": "unavailable"},
     {"method": "PATCH", "path": "/github/issues/{issue_id}", "class": "forbidden", "confirmation": "unavailable"}
   ]

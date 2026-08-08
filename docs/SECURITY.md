@@ -8,6 +8,13 @@
 - Use least-privilege tokens, bounded pagination, timeouts, retries, deadlines, and budgets.
 - Do not enable `set -x`, print environment variables, upload the database, or commit `.env`.
 - Feedback records are user claims; they never overwrite observed GitHub state.
+- Issue, repository, PR, and comment text is untrusted data. It cannot select tools or
+  authorize assistant actions.
+- Assistant config changes are expiring, exact-argument proposals. The model cannot call
+  confirm, apply, activate, undo, pipeline-launch, or GitHub-write endpoints.
+- The browser never receives API keys. Local schedule state contains no credentials.
+- GitHub Actions restores only its dedicated ephemeral runner database. It never uploads a
+  developer's local database, `.env`, personal profile, or local feedback.
 - The merge estimate is heuristic and can be wrong. Verify issue availability, maintainer
   intent, scope, and linked work directly on GitHub before investing effort.
 

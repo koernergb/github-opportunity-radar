@@ -65,3 +65,4 @@ export const conversationDetailSchema = z.object({ conversation: conversationSum
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 export const assistantProposalSchema = z.object({ proposal_id: z.string(), conversation_id: z.string(), base_revision_id: z.string(), resulting_revision_id: z.string().nullable(), kind: z.string(), arguments: z.record(z.string(), z.unknown()), argument_hash: z.string(), summary: z.string(), status: z.string(), created_at: z.string(), expires_at: z.string(), resolved_at: z.string().nullable() });
 export type AssistantProposal = z.infer<typeof assistantProposalSchema>;
+export const scheduleSchema = z.object({ schedule_id: z.string(), enabled: z.boolean(), interval_minutes: z.number(), timezone: z.string(), next_run_at: z.string().nullable(), last_attempt_at: z.string().nullable(), last_status: z.string().nullable(), updated_at: z.string() });

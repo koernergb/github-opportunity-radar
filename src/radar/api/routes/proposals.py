@@ -67,12 +67,15 @@ def reject(proposal_id: UUID, services: Services) -> ProposalResponse:
 
 @router.post("/{proposal_id}/confirm-run", status_code=202)
 def confirm_run(proposal_id: UUID, request: Request, services: Services) -> dict[str, str]:
-    if services.config is None or not services.environment.github_token:
+    config = (
+        SqlAlchemyConfigurationStore(services.sessions, services.clock).active_config()
+        or services.config
+    )
+    if config is None or not services.environment.github_token:
         raise ApiError(503, "pipeline_unavailable", "Pipeline credentials are not configured.")
     try:
         arguments = pipeline_proposal_arguments(services.sessions, services.clock, proposal_id)
         coordinator: BackgroundRunCoordinator = request.app.state.run_coordinator
-        config = services.config
         run_id = coordinator.reserve(config.config_hash, arguments)
     except ProposalError as error:
         raise ApiError(

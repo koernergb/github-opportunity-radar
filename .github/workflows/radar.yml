@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: opportunity-radar-${{ github.repository }}
@@ -30,6 +31,37 @@ jobs:
         run: uv python install 3.12
       - name: Install locked dependencies
         run: uv sync --all-extras --locked
+      - name: Find latest durable radar state
+        id: state
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo, per_page: 100
+            });
+            const state = artifacts
+              .filter(item => item.name === 'opportunity-radar-state' && !item.expired)
+              .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+            if (state) core.setOutput('run-id', state.workflow_run.id);
+      - name: Restore durable radar state
+        if: steps.state.outputs.run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: opportunity-radar-state
+          path: data
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.state.outputs.run-id }}
+      - name: Validate restored state or fall back visibly
+        shell: bash
+        run: |
+          if [ ! -f data/radar.sqlite ]; then
+            echo "No prior state found; performing a safe full sync."
+          elif [ "$(sqlite3 data/radar.sqlite 'PRAGMA quick_check;')" != "ok" ]; then
+            mv data/radar.sqlite data/radar.corrupt.sqlite
+            echo "Corrupt prior state quarantined; performing a safe full sync."
+          else
+            echo "Restored cursors, observations, analyses, scores, and run history."
+          fi
       - name: Run read-only opportunity radar
         id: radar
         shell: bash
@@ -47,6 +79,15 @@ jobs:
           path: digest.md
           if-no-files-found: error
           retention-days: 14
+      - name: Save dedicated unattended state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opportunity-radar-state
+          path: data/radar.sqlite
+          if-no-files-found: warn
+          retention-days: 14
+          overwrite: true
       - name: Propagate radar failure
         if: steps.radar.outputs.exit_code != '0'
         run: exit 1

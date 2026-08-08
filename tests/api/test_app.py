@@ -122,6 +122,15 @@ def test_static_asset_hook_mounts_existing_build_assets(tmp_path: Path) -> None:
     assert response.text == "export {};"
 
 
+def test_production_build_serves_root_and_deep_link_without_masking_api(tmp_path: Path) -> None:
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<main>Radar UI</main>", encoding="utf-8")
+    client = TestClient(_app(static_dir=tmp_path))
+    assert client.get("/").text == "<main>Radar UI</main>"
+    assert client.get("/opportunities/issue-1").text == "<main>Radar UI</main>"
+    assert client.get("/api/v1/not-real").status_code == 404
+
+
 def test_openapi_schema_matches_snapshot() -> None:
     canonical = json.dumps(_app().openapi(), sort_keys=True, separators=(",", ":")).encode()
     digest = hashlib.sha256(canonical).hexdigest()

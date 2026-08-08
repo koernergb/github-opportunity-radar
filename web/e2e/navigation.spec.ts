@@ -5,6 +5,8 @@ const pages = ["Assistant", "Opportunities", "Repositories", "Preferences", "Run
 test("all primary routes load and command palette is keyboard accessible", async ({ page }) => {
   await page.route("**/api/v1/readiness", (route) => route.fulfill({ json: { status: "ready", checks: {}, secrets: {} } }));
   await page.route("**/api/v1/opportunities**", (route) => route.fulfill({ json: { items: [], meta: { page: 1, page_size: 25, total: 0 } } }));
+  await page.route("**/api/v1/repositories", (route) => route.fulfill({ json: [{ repository_id: "00000000-0000-0000-0000-000000000020", full_name: "ml-explore/mlx", enabled: true, primary_language: "C++", candidate_count: 4, last_synced_at: "2026-08-08T12:00:00Z", health: null, sync_status: "current" }] }));
+  await page.route("**/api/v1/runs", (route) => route.fulfill({ json: [{ run_id: "00000000-0000-0000-0000-000000000030", status: "success", current_stage: null, started_at: "2026-08-08T12:00:00Z", finished_at: "2026-08-08T12:01:00Z", summary: { materially_changed: 3 }, event_cursor: null }] }));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Good morning" })).toBeVisible();
   for (const name of pages) {

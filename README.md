@@ -33,6 +33,27 @@ uv run radar doctor --github
 uv run radar run > digest.md
 ```
 
+## Local web application
+
+Install the frontend once, build it, and start the single local FastAPI process:
+
+```bash
+cd web
+pnpm install --frozen-lockfile
+pnpm build
+cd ..
+uv run radar web
+```
+
+Open `http://127.0.0.1:8000`. Deep links are served by the production build. For a
+two-process development session, run `pnpm dev` in `web/` and `uv run radar web` at the
+repository root. The empty-database walkthrough is a safe fixture demo: it exercises Home,
+Settings, configuration, and run-history empty states without contacting GitHub. Live sync
+requires `GITHUB_TOKEN`; assistant chat requires `OPENAI_API_KEY`.
+
+See [web operations](docs/web/OPERATIONS.md) for scheduling, state recovery,
+troubleshooting, and the release checklist.
+
 `OPENAI_API_KEY` is optional. Without it, analysis uses conservative, deterministic
 fallback features with low confidence. The full quality gate is:
 
@@ -75,7 +96,11 @@ jobs can start later than their nominal time during high Actions load.
 
 The workflow has read-only repository permissions, injects tokens only through the job
 environment, bounds execution to 30 minutes, prevents overlaps, and uploads the Markdown
-digest as a 14-day artifact. Never print environment variables or enable shell tracing.
+digest plus a dedicated 14-day unattended-state artifact. That ephemeral runner database
+contains cursors, GitHub observations, analyses, scores, and run history. It uses only the
+checked-in example profile and never receives a user's local feedback or personal config.
+Missing state performs a safe full sync; corrupt state is quarantined visibly. Never print
+environment variables or enable shell tracing.
 
 GitHub automatically disables scheduled workflows in a public repository after 60 days
 without repository activity. A maintainer must re-enable the workflow when that happens;

@@ -35,6 +35,8 @@ export const handlers = [
   http.get("/api/v1/runs", () => HttpResponse.json([{ run_id: "00000000-0000-0000-0000-000000000030", status: "success", current_stage: null, started_at: "2026-08-08T12:00:00Z", finished_at: "2026-08-08T12:01:00Z", summary: { scored: 4 }, event_cursor: "2026-08-08T12:01:00Z" }])),
   http.get("/api/v1/runs/:runId/events", () => HttpResponse.json([{ event_id: "00000000-0000-0000-0000-000000000031", stage: "digest", event_type: "stage_started", level: "info", message: "Started digest", error_type: null, details: {}, created_at: "2026-08-08T12:00:30Z" }])),
   http.post("/api/v1/runs", () => HttpResponse.json({ run_id: "00000000-0000-0000-0000-000000000032", status: "queued" }, { status: 202 })),
+  http.get("/api/v1/schedule", () => HttpResponse.json({ schedule_id: "00000000-0000-0000-0000-000000000070", enabled: false, interval_minutes: 60, timezone: "America/Detroit", next_run_at: null, last_attempt_at: null, last_status: null, updated_at: "2026-08-08T12:00:00Z" })),
+  http.put("/api/v1/schedule", async ({ request }) => HttpResponse.json({ schedule_id: "00000000-0000-0000-0000-000000000070", ...await request.json() as object, next_run_at: "2026-08-08T13:00:00Z", last_attempt_at: null, last_status: null, updated_at: "2026-08-08T12:00:00Z" })),
   http.get("/api/v1/health", () => HttpResponse.json({ status: "ok", version: "0.1.0" })),
   http.get("/api/v1/readiness", () =>
     HttpResponse.json({
