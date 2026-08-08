@@ -7,6 +7,10 @@ const revision = { revision_id: "00000000-0000-0000-0000-000000000010", valid: t
 const config = { version: 1, user: { timezone: "America/Detroit", max_estimated_hours: 12, interests: ["performance"], career_targets: ["ML systems"] }, scoring: { payoff_weights: { career_relevance: .22, technical_depth: .18, project_impact: .17, portfolio_explainability: .15, learning_value: .12, visibility: .08, timeliness: .08 } }, repositories: [{ full_name: "ml-explore/mlx", enabled: true }] };
 
 export const handlers = [
+  http.get("/api/v1/conversations", () => HttpResponse.json([{ conversation_id: "00000000-0000-0000-0000-000000000050", title: "Best performance work", created_at: "2026-08-08T12:00:00Z", updated_at: "2026-08-08T12:00:00Z", message_count: 2 }])),
+  http.get("/api/v1/conversations/:conversationId", () => HttpResponse.json({ conversation: { conversation_id: "00000000-0000-0000-0000-000000000050", title: "Best performance work", created_at: "2026-08-08T12:00:00Z", updated_at: "2026-08-08T12:00:00Z", message_count: 2 }, messages: [{ message_id: "00000000-0000-0000-0000-000000000051", role: "assistant", content: "MLX #42 has the strongest stored score.", status: "complete", error_code: null, created_at: "2026-08-08T12:00:00Z" }] })),
+  http.post("/api/v1/conversations", () => HttpResponse.json({ conversation_id: "00000000-0000-0000-0000-000000000052", title: "New conversation", created_at: "2026-08-08T12:00:00Z", updated_at: "2026-08-08T12:00:00Z", message_count: 0 }, { status: 201 })),
+  http.post("/api/v1/conversations/:conversationId/messages", () => new HttpResponse('event: text_delta\ndata: {"text":"Grounded answer"}\n\nevent: completed\ndata: {}\n\n', { headers: { "Content-Type": "text/event-stream" } })),
   http.get("/api/v1/opportunities", () => HttpResponse.json(opportunityFixture)),
   http.get("/api/v1/opportunities/:issueId", () => HttpResponse.json({
     summary: opportunityFixture.items[0],

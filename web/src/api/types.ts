@@ -59,3 +59,7 @@ export const runSchema = z.object({ run_id: z.string(), status: z.string(), curr
 export const runsSchema = z.array(runSchema);
 export const runEventSchema = z.object({ event_id: z.string(), stage: z.string(), event_type: z.string(), level: z.string(), message: z.string(), error_type: z.string().nullable(), details: z.record(z.string(), z.unknown()), created_at: z.string() });
 export type Run = z.infer<typeof runSchema>;
+export const conversationSummarySchema = z.object({ conversation_id: z.string(), title: z.string(), created_at: z.string(), updated_at: z.string(), message_count: z.number() });
+export const conversationMessageSchema = z.object({ message_id: z.string(), role: z.string(), content: z.string(), status: z.string(), error_code: z.string().nullable(), created_at: z.string() });
+export const conversationDetailSchema = z.object({ conversation: conversationSummarySchema, messages: z.array(conversationMessageSchema) });
+export type ConversationMessage = z.infer<typeof conversationMessageSchema>;

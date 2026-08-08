@@ -459,3 +459,52 @@ class ConfigActivation(UUIDPrimaryKey, Base):
         ForeignKey("config_revisions.id", ondelete="RESTRICT")
     )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class Conversation(UUIDPrimaryKey, Base):
+    """Persisted local assistant conversation independent of provider state."""
+
+    __tablename__ = "conversations"
+
+    title: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class ConversationMessage(UUIDPrimaryKey, Base):
+    """Immutable user, assistant, or tool transcript item."""
+
+    __tablename__ = "conversation_messages"
+    __table_args__ = (Index("ix_conversation_messages_order", "conversation_id", "created_at"),)
+
+    conversation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32))
+    prompt_version: Mapped[str | None] = mapped_column(String(64))
+    provider: Mapped[str | None] = mapped_column(String(64))
+    model_version: Mapped[str | None] = mapped_column(String(255))
+    usage_json: Mapped[JsonObject] = mapped_column(JSON, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class AssistantToolCall(UUIDPrimaryKey, Base):
+    """Validated provenance for one read-only assistant tool execution."""
+
+    __tablename__ = "assistant_tool_calls"
+
+    conversation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    message_id: Mapped[UUID] = mapped_column(
+        ForeignKey("conversation_messages.id", ondelete="CASCADE"), index=True
+    )
+    call_id: Mapped[str] = mapped_column(String(255))
+    tool_name: Mapped[str] = mapped_column(String(64))
+    arguments_json: Mapped[JsonObject] = mapped_column(JSON)
+    result_json: Mapped[JsonObject] = mapped_column(JSON)
+    schema_version: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())

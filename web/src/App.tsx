@@ -2,12 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
+import { AssistantPage } from "./pages/AssistantPage";
 import { HomePage } from "./pages/HomePage";
 import { OpportunitiesPage } from "./pages/OpportunitiesPage";
 import { PreferencesPage } from "./pages/PreferencesPage";
 import { RepositoriesPage } from "./pages/RepositoriesPage";
 import { RunsPage } from "./pages/RunsPage";
-import { AssistantPage, SettingsPage } from "./pages/Pages";
+import { SettingsPage } from "./pages/Pages";
 
 const router = createBrowserRouter([{ path: "/", element: <AppShell />, errorElement: <main className="fatal-state"><h1>That page could not load</h1><a href="/">Return home</a></main>, children: [
   { index: true, element: <HomePage /> },

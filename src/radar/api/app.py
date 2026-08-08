@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from radar import __version__
 from radar.api.dependencies import ApiServices
 from radar.api.errors import install_error_handlers
+from radar.api.routes.assistant import router as assistant_router
 from radar.api.routes.health import router as health_router
 from radar.api.routes.preferences import router as preferences_router
 from radar.api.routes.read import router as read_router
@@ -71,6 +72,7 @@ def create_app(
 
     api = APIRouter(prefix=API_PREFIX)
     api.include_router(health_router)
+    api.include_router(assistant_router)
     api.include_router(preferences_router)
     api.include_router(read_router)
     api.include_router(runs_router)
