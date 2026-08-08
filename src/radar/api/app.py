@@ -15,6 +15,7 @@ from radar.api.errors import install_error_handlers
 from radar.api.routes.assistant import router as assistant_router
 from radar.api.routes.health import router as health_router
 from radar.api.routes.preferences import router as preferences_router
+from radar.api.routes.proposals import router as proposals_router
 from radar.api.routes.read import router as read_router
 from radar.api.routes.runs import router as runs_router
 from radar.clock import Clock, SystemClock
@@ -74,6 +75,7 @@ def create_app(
     api.include_router(health_router)
     api.include_router(assistant_router)
     api.include_router(preferences_router)
+    api.include_router(proposals_router)
     api.include_router(read_router)
     api.include_router(runs_router)
     app.include_router(api)

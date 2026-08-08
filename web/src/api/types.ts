@@ -63,3 +63,5 @@ export const conversationSummarySchema = z.object({ conversation_id: z.string(),
 export const conversationMessageSchema = z.object({ message_id: z.string(), role: z.string(), content: z.string(), status: z.string(), error_code: z.string().nullable(), created_at: z.string() });
 export const conversationDetailSchema = z.object({ conversation: conversationSummarySchema, messages: z.array(conversationMessageSchema) });
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
+export const assistantProposalSchema = z.object({ proposal_id: z.string(), conversation_id: z.string(), base_revision_id: z.string(), resulting_revision_id: z.string().nullable(), kind: z.string(), arguments: z.record(z.string(), z.unknown()), argument_hash: z.string(), summary: z.string(), status: z.string(), created_at: z.string(), expires_at: z.string(), resolved_at: z.string().nullable() });
+export type AssistantProposal = z.infer<typeof assistantProposalSchema>;

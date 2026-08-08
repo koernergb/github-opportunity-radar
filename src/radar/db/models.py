@@ -461,6 +461,32 @@ class ConfigActivation(UUIDPrimaryKey, Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime())
 
 
+class AssistantChangeProposal(UUIDPrimaryKey, Base):
+    """Single-use, expiring assistant proposal separated from its application."""
+
+    __tablename__ = "assistant_change_proposals"
+    __table_args__ = (Index("ix_assistant_proposals_status_expiry", "status", "expires_at"),)
+
+    conversation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    base_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("config_revisions.id", ondelete="RESTRICT")
+    )
+    resulting_revision_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("config_revisions.id", ondelete="RESTRICT")
+    )
+    kind: Mapped[str] = mapped_column(String(32))
+    arguments_json: Mapped[JsonObject] = mapped_column(JSON)
+    proposed_config: Mapped[JsonObject] = mapped_column(JSON)
+    argument_hash: Mapped[str] = mapped_column(String(64))
+    summary: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+
 class Conversation(UUIDPrimaryKey, Base):
     """Persisted local assistant conversation independent of provider state."""
 

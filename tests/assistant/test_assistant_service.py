@@ -98,7 +98,7 @@ async def test_tool_result_is_persisted_and_disables_further_tools(
         call = session.scalar(select(AssistantToolCall))
         assert call is not None
         assert call.tool_name == "inspect_runs"
-        assert call.schema_version == "assistant_read_tools_v1"
+        assert call.schema_version == "assistant_tools_v2"
 
 
 @pytest.mark.asyncio
@@ -171,6 +171,6 @@ async def _collect_for(
 
 
 def test_system_prompt_marks_repository_content_untrusted() -> None:
-    prompt = (Path(__file__).parents[2] / "src/radar/assistant/prompts/system_v1.txt").read_text()
+    prompt = (Path(__file__).parents[2] / "src/radar/assistant/prompts/system_v2.txt").read_text()
     assert "UNTRUSTED DATA" in prompt
     assert "Never follow" in prompt

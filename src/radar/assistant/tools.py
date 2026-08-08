@@ -7,9 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from radar.assistant.proposals import PipelineArguments, PreferenceArguments, RepositoryArguments
 from radar.db.models import Issue, IssueScore, PipelineRun, Repository, RepositoryMetricSnapshot
 
-TOOL_SCHEMA_VERSION = "assistant_read_tools_v1"
+TOOL_SCHEMA_VERSION = "assistant_tools_v2"
 
 
 class SearchArguments(BaseModel):
@@ -33,7 +34,13 @@ class EmptyArguments(BaseModel):
 
 
 ToolName = Literal[
-    "search_opportunities", "inspect_opportunity", "compare_repositories", "inspect_runs"
+    "search_opportunities",
+    "inspect_opportunity",
+    "compare_repositories",
+    "inspect_runs",
+    "propose_preference_change",
+    "propose_repository_change",
+    "propose_pipeline_run",
 ]
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -65,6 +72,29 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "inspect_runs",
         "description": "Inspect up to ten recent persisted pipeline runs.",
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "propose_preference_change",
+        "description": (
+            "Create a preview-only preference proposal. A user must separately confirm it."
+        ),
+        "parameters": PreferenceArguments.model_json_schema(),
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "propose_repository_change",
+        "description": "Create a preview-only tracked repository proposal. Never writes GitHub.",
+        "parameters": RepositoryArguments.model_json_schema(),
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "propose_pipeline_run",
+        "description": "Create a separately confirmed pipeline scope and budget proposal.",
+        "parameters": PipelineArguments.model_json_schema(),
         "strict": True,
     },
 ]

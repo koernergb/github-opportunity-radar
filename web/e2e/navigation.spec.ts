@@ -58,3 +58,18 @@ test("completed run timeline remains available after refresh", async ({ page }) 
   await page.reload();
   await expect(page.getByText("Started analyze_score")).toBeVisible();
 });
+
+test("assistant proposal requires confirmation and supports undo", async ({ page }) => {
+  const conversation = { conversation_id: "00000000-0000-0000-0000-000000000050", title: "Change preferences", created_at: "2026-08-08T12:00:00Z", updated_at: "2026-08-08T12:00:00Z", message_count: 1 };
+  const proposal = { proposal_id: "00000000-0000-0000-0000-000000000060", conversation_id: conversation.conversation_id, base_revision_id: "00000000-0000-0000-0000-000000000010", resulting_revision_id: null as string | null, kind: "preferences", arguments: { interests: ["compilers"] }, argument_hash: "a".repeat(64), summary: "Update interests", status: "pending", created_at: "2026-08-08T12:00:00Z", expires_at: "2026-08-08T12:15:00Z", resolved_at: null as string | null };
+  await page.route("**/api/v1/conversations", (route) => route.fulfill({ json: [conversation] }));
+  await page.route("**/api/v1/conversations/*", (route) => route.fulfill({ json: { conversation, messages: [] } }));
+  await page.route("**/api/v1/assistant/proposals/*/confirm", (route) => { proposal.status = "applied"; proposal.resulting_revision_id = "00000000-0000-0000-0000-000000000061"; proposal.resolved_at = "2026-08-08T12:01:00Z"; return route.fulfill({ json: proposal }); });
+  await page.route("**/api/v1/assistant/proposals/*/undo", (route) => route.fulfill({ json: { status: "undone", revision_id: proposal.base_revision_id } }));
+  await page.route("**/api/v1/assistant/proposals/*", (route) => route.fulfill({ json: [proposal] }));
+  await page.goto("/assistant");
+  await expect(page.getByText(/"compilers"/)).toBeVisible();
+  await page.getByRole("button", { name: "Confirm exact change" }).click();
+  await expect(page.getByRole("button", { name: "Undo revision" })).toBeVisible();
+  await page.getByRole("button", { name: "Undo revision" }).click();
+});

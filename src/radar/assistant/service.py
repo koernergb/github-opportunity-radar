@@ -8,9 +8,15 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from radar.assistant.proposals import (
+    ProposalError,
+    create_config_proposal,
+    create_pipeline_proposal,
+)
 from radar.assistant.provider import (
     AssistantProvider,
     ProviderCompleted,
@@ -27,7 +33,7 @@ from radar.clock import Clock
 from radar.db.models import AssistantToolCall, Conversation, ConversationMessage
 from radar.db.session import transaction
 
-ASSISTANT_PROMPT_VERSION = "assistant_system_v1"
+ASSISTANT_PROMPT_VERSION = "assistant_system_v2"
 MAX_MESSAGES = 20
 MAX_TOOLS = 4
 MAX_OUTPUT_TOKENS = 800
@@ -187,7 +193,7 @@ async def run_assistant_turn(
     except TimeoutError as error:
         _fail_message(sessions, assistant_message.id, "assistant_timeout")
         raise AssistantTurnError("assistant turn timed out") from error
-    except (json.JSONDecodeError, ToolInputError) as error:
+    except (json.JSONDecodeError, ProposalError, ToolInputError, ValidationError) as error:
         _fail_message(sessions, assistant_message.id, "assistant_tool_invalid")
         raise AssistantTurnError("assistant emitted an invalid tool call") from error
     except AssistantTurnError:
@@ -208,7 +214,7 @@ async def run_assistant_turn(
 
 
 def _provider_messages(history: list[ConversationMessage], user_text: str) -> list[dict[str, Any]]:
-    prompt = (Path(__file__).parent / "prompts" / "system_v1.txt").read_text(encoding="utf-8")
+    prompt = (Path(__file__).parent / "prompts" / "system_v2.txt").read_text(encoding="utf-8")
     messages = [{"role": "developer", "content": prompt}]
     messages.extend(
         {"role": item.role, "content": item.content}
@@ -227,12 +233,39 @@ def _execute_tools(
     calls: list[ProviderToolCall],
 ) -> list[dict[str, Any]]:
     outputs = []
-    with transaction(sessions) as session:
-        for call in calls:
-            arguments = json.loads(call.arguments)
-            if not isinstance(arguments, dict):
-                raise ToolInputError("tool arguments must be an object")
-            result = execute_read_tool(session, call.name, arguments)
+    for call in calls:
+        arguments = json.loads(call.arguments)
+        if not isinstance(arguments, dict):
+            raise ToolInputError("tool arguments must be an object")
+        if call.name == "propose_preference_change":
+            proposal = create_config_proposal(
+                sessions, clock, conversation_id, "preferences", arguments
+            )
+            result = {
+                "proposal_id": str(proposal.id),
+                "status": proposal.status,
+                "requires_user_confirmation": True,
+            }
+        elif call.name == "propose_repository_change":
+            proposal = create_config_proposal(
+                sessions, clock, conversation_id, "repository", arguments
+            )
+            result = {
+                "proposal_id": str(proposal.id),
+                "status": proposal.status,
+                "requires_user_confirmation": True,
+            }
+        elif call.name == "propose_pipeline_run":
+            proposal = create_pipeline_proposal(sessions, clock, conversation_id, arguments)
+            result = {
+                "proposal_id": str(proposal.id),
+                "status": proposal.status,
+                "requires_separate_scope_budget_confirmation": True,
+            }
+        else:
+            with sessions() as read_session:
+                result = execute_read_tool(read_session, call.name, arguments)
+        with transaction(sessions) as session:
             session.add(
                 AssistantToolCall(
                     conversation_id=conversation_id,
@@ -245,7 +278,7 @@ def _execute_tools(
                     created_at=clock.now(),
                 )
             )
-            outputs.append({"call_id": call.call_id, "name": call.name, "result": result})
+        outputs.append({"call_id": call.call_id, "name": call.name, "result": result})
     return outputs
 
 
