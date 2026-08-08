@@ -32,3 +32,18 @@ test("opportunity filters survive inspector feedback flow", async ({ page }) => 
   await expect(page).toHaveURL(/query=safe/);
   await expect(page.getByRole("textbox", { name: "Search issues" })).toHaveValue("safe");
 });
+
+test("preference conflict is explicit and recoverable", async ({ page }) => {
+  const revision = { revision_id: "00000000-0000-0000-0000-000000000010", valid: true, config_hash: "abcdef123456", profile_hash: "123456abcdef", source: "manual", summary: "Active", created_at: "2026-08-08T12:00:00Z", activated_at: "2026-08-08T12:00:00Z", supersedes_id: null, validation_errors: [] };
+  const config = { version: 1, user: { timezone: "UTC", max_estimated_hours: 8, interests: [], career_targets: [] }, scoring: { payoff_weights: { career_relevance: .22, technical_depth: .18, project_impact: .17, portfolio_explainability: .15, learning_value: .12, visibility: .08, timeliness: .08 } }, repositories: [] };
+  await page.route("**/api/v1/preferences", (route) => route.fulfill({ json: { revision, config } }));
+  await page.route("**/api/v1/preferences/revisions", (route) => route.fulfill({ json: [revision] }));
+  await page.route("**/api/v1/preferences/proposals", (route) => route.fulfill({ status: 201, json: { ...revision, revision_id: "00000000-0000-0000-0000-000000000011", activated_at: null } }));
+  await page.route("**/api/v1/preferences/revisions/*/activate", (route) => route.fulfill({ status: 409, json: { error: { code: "config_conflict", message: "The active configuration changed.", request_id: "test" } } }));
+  await page.goto("/preferences");
+  await page.getByRole("button", { name: "Validate & preview" }).click();
+  await page.getByRole("button", { name: /Activate revision/ }).click();
+  await expect(page.getByText(/preferences changed elsewhere/)).toBeVisible();
+  await page.getByRole("button", { name: "Reload active revision" }).click();
+  await expect(page.getByText("Contribution fit")).toBeVisible();
+});

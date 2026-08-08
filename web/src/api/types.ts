@@ -45,3 +45,13 @@ export const opportunityDetailSchema = z.object({
 export type Opportunity = z.infer<typeof opportunitySchema>;
 export type OpportunityPage = z.infer<typeof opportunityPageSchema>;
 export type OpportunityDetail = z.infer<typeof opportunityDetailSchema>;
+
+export const revisionSchema = z.object({
+  revision_id: z.string(), valid: z.boolean(), config_hash: z.string().nullable(), profile_hash: z.string().nullable(),
+  source: z.string(), summary: z.string(), created_at: z.string(), activated_at: z.string().nullable(), supersedes_id: z.string().nullable(),
+  validation_errors: z.array(z.object({ path: z.string(), message: z.string() })),
+});
+export const preferencesSchema = z.object({ revision: revisionSchema, config: z.record(z.string(), z.unknown()) });
+export const repositorySchema = z.object({ repository_id: z.string(), full_name: z.string(), enabled: z.boolean(), primary_language: z.string().nullable(), candidate_count: z.number(), last_synced_at: z.string(), health: z.record(z.string(), z.unknown()).nullable(), sync_status: z.enum(["current", "stale"]) });
+export const repositoriesSchema = z.array(repositorySchema);
+export type Revision = z.infer<typeof revisionSchema>;
