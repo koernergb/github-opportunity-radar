@@ -3,7 +3,8 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
 import { HomePage } from "./pages/HomePage";
-import { AssistantPage, OpportunitiesPage, PreferencesPage, RepositoriesPage, RunsPage, SettingsPage } from "./pages/Pages";
+import { OpportunitiesPage } from "./pages/OpportunitiesPage";
+import { AssistantPage, PreferencesPage, RepositoriesPage, RunsPage, SettingsPage } from "./pages/Pages";
 
 const router = createBrowserRouter([{ path: "/", element: <AppShell />, errorElement: <main className="fatal-state"><h1>That page could not load</h1><a href="/">Return home</a></main>, children: [
   { index: true, element: <HomePage /> },
