@@ -27,6 +27,13 @@ class AdvancingClock:
         return self.value
 
 
+class FrozenClock:
+    value = datetime(2026, 8, 5, tzinfo=UTC)
+
+    def now(self) -> datetime:
+        return self.value
+
+
 @pytest.fixture
 def store() -> SqlAlchemyConfigurationStore:
     engine = create_engine(
@@ -91,6 +98,27 @@ def test_stale_activation_conflicts_and_undo_preserves_history(
     with sessions() as session:
         assert session.scalar(select(func.count()).select_from(ConfigRevision)) == 2
         assert session.scalar(select(func.count()).select_from(ConfigActivation)) == 3
+
+
+def test_equal_clock_values_still_make_latest_activation_authoritative() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    sessions = create_session_factory(engine)
+    Base.metadata.create_all(engine)
+    store = SqlAlchemyConfigurationStore(sessions, FrozenClock())
+    first = store.create_revision(_payload(), source="bootstrap", summary="First")
+    changed = _payload()
+    changed["user"]["interests"] = ["compilers"]  # type: ignore[index]
+    second = store.create_revision(changed, source="assistant", summary="Second")
+
+    first_activation = store.activate(first.id, expected_active_id=None)
+    second_activation = store.activate(second.id, expected_active_id=first.id)
+
+    assert second_activation.created_at > first_activation.created_at
+    assert store.active_revision().id == second.id  # type: ignore[union-attr]
 
 
 def test_bootstrap_and_export_are_deterministic(

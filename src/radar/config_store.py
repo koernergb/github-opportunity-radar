@@ -1,7 +1,7 @@
 """Immutable configuration revisions shared by CLI, API, and pipeline callers."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Protocol
 from uuid import UUID
@@ -120,7 +120,12 @@ class SqlAlchemyConfigurationStore:
 
     def activate(self, revision_id: UUID, *, expected_active_id: UUID | None) -> ConfigActivation:
         with self._sessions.begin() as session:
-            current = _active_revision(session)
+            current_activation = _active_activation(session)
+            current = (
+                session.get(ConfigRevision, current_activation.revision_id)
+                if current_activation is not None
+                else None
+            )
             current_id = current.id if current is not None else None
             if current_id != expected_active_id:
                 raise ConfigConflictError("active configuration changed")
@@ -132,7 +137,7 @@ class SqlAlchemyConfigurationStore:
             activation = ConfigActivation(
                 revision_id=revision.id,
                 previous_revision_id=current_id,
-                created_at=self._clock.now(),
+                created_at=_next_activation_time(self._clock.now(), current_activation),
             )
             session.add(activation)
         return activation
@@ -176,12 +181,22 @@ class SqlAlchemyConfigurationStore:
 
 
 def _active_revision(session: Session) -> ConfigRevision | None:
-    activation = session.scalar(
+    activation = _active_activation(session)
+    return session.get(ConfigRevision, activation.revision_id) if activation is not None else None
+
+
+def _active_activation(session: Session) -> ConfigActivation | None:
+    return session.scalar(
         select(ConfigActivation).order_by(
             ConfigActivation.created_at.desc(), ConfigActivation.id.desc()
         )
     )
-    return session.get(ConfigRevision, activation.revision_id) if activation is not None else None
+
+
+def _next_activation_time(requested: datetime, current: ConfigActivation | None) -> datetime:
+    if current is None or requested > current.created_at:
+        return requested
+    return current.created_at + timedelta(microseconds=1)
 
 
 def _validate(payload: object) -> tuple[RadarConfig | None, list[dict[str, Any]]]:

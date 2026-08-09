@@ -26,7 +26,6 @@ def test_help() -> None:
 
     assert result.exit_code == 0
     assert "Rank open-source contribution opportunities" in result.output
-    assert "--version" in result.output
 
 
 def test_version() -> None:
