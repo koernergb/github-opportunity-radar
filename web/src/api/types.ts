@@ -66,3 +66,24 @@ export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 export const assistantProposalSchema = z.object({ proposal_id: z.string(), conversation_id: z.string(), base_revision_id: z.string(), resulting_revision_id: z.string().nullable(), kind: z.string(), arguments: z.record(z.string(), z.unknown()), argument_hash: z.string(), summary: z.string(), status: z.string(), created_at: z.string(), expires_at: z.string(), resolved_at: z.string().nullable() });
 export type AssistantProposal = z.infer<typeof assistantProposalSchema>;
 export const scheduleSchema = z.object({ schedule_id: z.string(), enabled: z.boolean(), interval_minutes: z.number(), timezone: z.string(), next_run_at: z.string().nullable(), last_attempt_at: z.string().nullable(), last_status: z.string().nullable(), updated_at: z.string() });
+export const llmProviderSchema = z.object({
+  provider: z.enum(["openai", "anthropic", "google", "wafer"]),
+  display_name: z.string(),
+  credential_status: z.enum(["configured", "missing", "invalid"]),
+  credential_source: z.enum(["environment", "keychain"]).nullable(),
+  structured_analysis: z.boolean(),
+  assistant_tools: z.boolean(),
+  model_suggestions: z.array(z.string()),
+  notes: z.string().nullable(),
+  selected_for_analysis: z.boolean(),
+  selected_for_assistant: z.boolean(),
+  analysis_model: z.string().nullable(),
+  assistant_model: z.string().nullable(),
+});
+export const llmProvidersSchema = z.array(llmProviderSchema);
+export const credentialMutationSchema = z.object({
+  provider: z.enum(["openai", "anthropic", "google", "wafer"]),
+  status: z.enum(["configured", "removed", "connected"]),
+  source: z.enum(["environment", "keychain"]).nullable(),
+});
+export type LlmProvider = z.infer<typeof llmProviderSchema>;

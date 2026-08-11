@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add selectable OpenAI, Anthropic, Google Gemini, and Wafer backends for issue analysis
+  and assistant chat.
+- Add write-only Settings controls backed by the operating-system credential vault, with
+  environment-variable support retained for CI and headless runs.
+
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The project uses semantic versioning for releases and explicit internal artifact versions.
 

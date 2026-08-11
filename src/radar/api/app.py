@@ -17,6 +17,7 @@ from radar.api.dependencies import ApiServices
 from radar.api.errors import install_error_handlers
 from radar.api.routes.assistant import router as assistant_router
 from radar.api.routes.health import router as health_router
+from radar.api.routes.llm import router as llm_router
 from radar.api.routes.preferences import router as preferences_router
 from radar.api.routes.proposals import router as proposals_router
 from radar.api.routes.read import router as read_router
@@ -27,6 +28,8 @@ from radar.config_store import SqlAlchemyConfigurationStore
 from radar.db.session import create_database_engine, create_session_factory, migrate_database
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
+from radar.llm.registry import ProviderCredentialError, ProviderRegistry
+from radar.llm.secrets import CredentialResolver, KeyringSecretStore
 from radar.pipeline.background import BackgroundRunConflictError, BackgroundRunCoordinator
 from radar.pipeline.orchestrator import run_pipeline
 from radar.scheduling import claim_due, record_schedule_status
@@ -44,6 +47,7 @@ def create_app(
     clock: Clock | None = None,
     allowed_origins: Sequence[str] = (),
     static_dir: Path | None = None,
+    credentials: CredentialResolver | None = None,
 ) -> FastAPI:
     """Build an application entirely from explicitly injected services."""
 
@@ -63,12 +67,14 @@ def create_app(
         redoc_url=None,
         lifespan=lifespan,
     )
+    app.state.allowed_origins = tuple(allowed_origins)
     app.state.services = ApiServices(
         environment=environment,
         config=config,
         config_error=config_error,
         sessions=sessions,
         clock=clock or SystemClock(),
+        credentials=credentials or CredentialResolver(environment),
         static_dir=static_dir,
     )
     app.state.run_coordinator = BackgroundRunCoordinator(sessions, app.state.services.clock)
@@ -77,7 +83,7 @@ def create_app(
         allow_origins=list(allowed_origins),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Request-ID"],
+        allow_headers=["Content-Type", "X-Request-ID", "X-Radar-Secret-Intent"],
     )
 
     @app.middleware("http")
@@ -91,6 +97,7 @@ def create_app(
 
     api = APIRouter(prefix=API_PREFIX)
     api.include_router(health_router)
+    api.include_router(llm_router)
     api.include_router(assistant_router)
     api.include_router(preferences_router)
     api.include_router(proposals_router)
@@ -151,6 +158,12 @@ async def _schedule_loop(app: FastAPI) -> None:
             active_coordinator: BackgroundRunCoordinator = coordinator,
         ) -> None:
             assert active_services.environment.github_token is not None
+            try:
+                analysis_provider = ProviderRegistry(active_services.credentials).analysis(
+                    active_config.llm.provider, active_config.llm.model
+                )
+            except ProviderCredentialError:
+                analysis_provider = None
             async with GitHubRestTransport(
                 token=active_services.environment.github_token,
                 api_version=active_config.github.api_version,
@@ -160,7 +173,7 @@ async def _schedule_loop(app: FastAPI) -> None:
                     GitHubClient(transport),
                     active_services.sessions,
                     active_services.clock,
-                    api_key=active_services.environment.openai_api_key,
+                    provider=analysis_provider,
                     fallback_only=False,
                     deadline_seconds=600,
                     reserved_run_id=active_run_id,
@@ -190,5 +203,12 @@ def create_default_app() -> FastAPI:
         config=config,
         config_error=config_error,
         allowed_origins=environment.web_origins,
-        static_dir=Path(__file__).resolve().parents[1] / "web" / "dist",
+        static_dir=_default_static_dir(),
+        credentials=CredentialResolver(environment, KeyringSecretStore()),
     )
+
+
+def _default_static_dir() -> Path:
+    """Resolve the Vite production build at the repository root ``web/dist``."""
+    # src/radar/api/app.py -> repository root is parents[3]
+    return Path(__file__).resolve().parents[3] / "web" / "dist"

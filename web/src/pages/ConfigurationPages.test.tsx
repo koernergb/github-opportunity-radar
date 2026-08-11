@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 
 import { PreferencesPage } from "./PreferencesPage";
 import { RepositoriesPage } from "./RepositoriesPage";
+import { SettingsPage } from "./SettingsPage";
 
 function renderWithClient(element: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -32,4 +33,16 @@ it("adds a repository through local configuration only", async () => {
   await user.type(input, "openai/openai-python");
   await user.click(screen.getByRole("button", { name: /Add to config/ }));
   expect(await screen.findByText(/GitHub was not modified/)).toBeInTheDocument();
+});
+
+it("keeps provider credentials write-only in settings", async () => {
+  const user = userEvent.setup();
+  renderWithClient(<SettingsPage />);
+  const keyInput = await screen.findByLabelText("Anthropic API key");
+  expect(keyInput).toHaveAttribute("type", "password");
+  expect(keyInput).toHaveValue("");
+  await user.type(keyInput, "anthropic-secret");
+  await user.click(screen.getAllByRole("button", { name: "Save key" })[1]!);
+  expect(keyInput).toHaveValue("");
+  expect(screen.queryByDisplayValue("anthropic-secret")).not.toBeInTheDocument();
 });

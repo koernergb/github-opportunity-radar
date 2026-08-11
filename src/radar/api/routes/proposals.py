@@ -20,6 +20,7 @@ from radar.assistant.proposals import (
 from radar.config_store import ConfigConflictError, SqlAlchemyConfigurationStore
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
+from radar.llm.registry import ProviderCredentialError, ProviderRegistry
 from radar.pipeline.background import BackgroundRunConflictError, BackgroundRunCoordinator
 from radar.pipeline.orchestrator import run_pipeline
 
@@ -90,6 +91,13 @@ def confirm_run(proposal_id: UUID, request: Request, services: Services) -> dict
             409, "proposal_unavailable", "The run proposal cannot be applied."
         ) from error
 
+    try:
+        analysis_provider = ProviderRegistry(services.credentials).analysis(
+            config.llm.provider, config.llm.model
+        )
+    except ProviderCredentialError:
+        analysis_provider = None
+
     async def work() -> None:
         assert services.environment.github_token is not None
         async with GitHubRestTransport(
@@ -100,7 +108,7 @@ def confirm_run(proposal_id: UUID, request: Request, services: Services) -> dict
                 GitHubClient(transport),
                 services.sessions,
                 services.clock,
-                api_key=services.environment.openai_api_key,
+                provider=analysis_provider,
                 fallback_only=bool(arguments["fallback_only"]),
                 deadline_seconds=int(arguments["deadline_seconds"]),
                 reserved_run_id=run_id,

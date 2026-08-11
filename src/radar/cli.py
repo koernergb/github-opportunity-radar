@@ -40,6 +40,8 @@ from radar.github.rest import GitHubRestTransport
 from radar.ingestion.issues import IssueSyncSummary, sync_issues
 from radar.ingestion.pull_requests import sync_pull_request_history
 from radar.ingestion.repositories import RepositorySyncSummary, sync_repositories
+from radar.llm.registry import ProviderCredentialError, ProviderRegistry
+from radar.llm.secrets import CredentialResolver
 from radar.metrics.repository_health import calculate_repository_metrics
 from radar.pipeline.orchestrator import PipelineLockedError, PipelineOutcome, run_pipeline
 from radar.scoring.engine import SCORE_VERSION, rank_scores
@@ -169,10 +171,16 @@ def doctor(
         f"({len(loaded.repositories)} repositories)"
     )
     _diagnose_database(database_url or environment.radar_database_url)
-    if environment.openai_api_key:
-        console.print("[green]OPENAI_API_KEY is configured.[/]")
-    else:
-        console.print("[yellow]OPENAI_API_KEY is absent; deterministic fallback will be used.[/]")
+    credentials = CredentialResolver(environment)
+    for provider in ("openai", "anthropic", "google", "wafer"):
+        state = credentials.resolve(provider).source
+        if state:
+            console.print(f"[green]{provider.upper()} credentials are configured via {state}.[/]")
+    if credentials.resolve(loaded.llm.provider).value is None:
+        console.print(
+            f"[yellow]{loaded.llm.provider.upper()} credentials are absent; "
+            "deterministic fallback will be used.[/]"
+        )
     console.print("[green]Local configuration support is available.[/]")
     if not github:
         return
@@ -602,6 +610,14 @@ def analyze_candidates(
             statement = statement.where(Repository.full_name == repository)
         issue_ids = list(session.scalars(statement).all())[:maximum]
     statuses: dict[str, int] = {"success": 0, "fallback": 0}
+    provider = None
+    if not fallback_only:
+        try:
+            provider = ProviderRegistry(CredentialResolver(environment)).analysis(
+                settings.llm.provider, settings.llm.model
+            )
+        except ProviderCredentialError:
+            provider = None
     for issue_id in issue_ids:
         with factory.begin() as session:
             analysis = analyze_issue(
@@ -609,7 +625,7 @@ def analyze_candidates(
                 issue_id=issue_id,
                 config=settings,
                 clock=SystemClock(),
-                api_key=environment.openai_api_key,
+                provider=provider,
                 fallback_only=fallback_only,
             )
             statuses[analysis.status] = statuses.get(analysis.status, 0) + 1
@@ -723,6 +739,14 @@ def run_all(
     url = database_url or environment.radar_database_url
     migrate_database(url)
     sessions = create_session_factory(create_database_engine(url))
+    provider = None
+    if not fallback_only:
+        try:
+            provider = ProviderRegistry(CredentialResolver(environment)).analysis(
+                settings.llm.provider, settings.llm.model
+            )
+        except ProviderCredentialError:
+            provider = None
 
     async def execute() -> PipelineOutcome:
         async with GitHubRestTransport(
@@ -734,7 +758,7 @@ def run_all(
                 GitHubClient(transport),
                 sessions,
                 SystemClock(),
-                api_key=environment.openai_api_key,
+                provider=provider,
                 fallback_only=fallback_only,
                 deadline_seconds=deadline_seconds,
             )

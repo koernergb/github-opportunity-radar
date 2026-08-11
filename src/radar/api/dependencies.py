@@ -8,6 +8,7 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session, sessionmaker
 
 from radar.clock import Clock
+from radar.llm.secrets import CredentialResolver
 from radar.settings import ConfigLoadError, EnvironmentSettings, RadarConfig
 
 
@@ -20,6 +21,7 @@ class ApiServices:
     config_error: ConfigLoadError | None
     sessions: sessionmaker[Session]
     clock: Clock
+    credentials: CredentialResolver
     static_dir: Path | None = None
 
 

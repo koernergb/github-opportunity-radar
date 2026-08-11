@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
-from radar.api.app import API_PREFIX, create_app
+from radar.api.app import API_PREFIX, _default_static_dir, create_app
 from radar.api.errors import ApiError
 from radar.db.models import Base
 from radar.db.session import create_session_factory
@@ -58,6 +58,9 @@ def test_liveness_and_readiness_are_distinct_and_secrets_are_redacted() -> None:
         "secrets": {
             "github_token": {"status": "configured"},
             "openai_api_key": {"status": "configured"},
+            "anthropic_api_key": {"status": "missing"},
+            "google_api_key": {"status": "missing"},
+            "wafer_api_key": {"status": "missing"},
         },
     }
     assert "github-secret" not in readiness.text
@@ -109,6 +112,13 @@ def test_cors_allows_only_configured_local_origin() -> None:
 
     assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert "access-control-allow-origin" not in denied.headers
+
+
+def test_default_static_dir_points_at_repository_web_dist() -> None:
+    static_dir = _default_static_dir()
+    expected = Path(__file__).resolve().parents[2] / "web" / "dist"
+    assert static_dir == expected
+    assert (static_dir / "index.html").is_file()
 
 
 def test_static_asset_hook_mounts_existing_build_assets(tmp_path: Path) -> None:

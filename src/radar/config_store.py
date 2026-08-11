@@ -17,7 +17,15 @@ from radar.settings import RadarConfig
 
 CONFIG_REVISION_SCHEMA_VERSION = "config_revision_v1"
 ConfigSource = Literal["bootstrap", "manual", "assistant", "imported", "undo"]
-_SECRET_KEYS = {"github_token", "openai_api_key", "authorization"}
+_SECRET_KEYS = {
+    "github_token",
+    "openai_api_key",
+    "anthropic_api_key",
+    "google_api_key",
+    "wafer_api_key",
+    "api_key",
+    "authorization",
+}
 
 
 class ConfigConflictError(RuntimeError):

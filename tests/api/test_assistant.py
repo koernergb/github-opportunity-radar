@@ -6,6 +6,7 @@ from radar.api.app import API_PREFIX
 from radar.assistant.proposals import create_config_proposal
 from radar.assistant.service import create_conversation
 from radar.config_store import SqlAlchemyConfigurationStore
+from radar.llm.secrets import CredentialResolver
 from radar.settings import EnvironmentSettings
 from tests.api.test_app import _app
 
@@ -19,6 +20,7 @@ def test_missing_openai_key_only_disables_assistant() -> None:
         config_error=services.config_error,
         sessions=services.sessions,
         clock=services.clock,
+        credentials=CredentialResolver(EnvironmentSettings(_env_file=None)),
         static_dir=services.static_dir,
     )
     client = TestClient(app)

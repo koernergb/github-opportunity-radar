@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from radar.api.dependencies import Services
 from radar.api.errors import ApiError
-from radar.assistant.provider import AssistantProvider, OpenAIResponsesProvider
+from radar.assistant.provider import AssistantProvider
 from radar.assistant.service import (
     AssistantTurnError,
     ConversationNotFoundError,
@@ -22,6 +22,7 @@ from radar.assistant.service import (
     run_assistant_turn,
 )
 from radar.config_store import SqlAlchemyConfigurationStore
+from radar.llm.registry import ProviderCredentialError, ProviderRegistry
 
 router = APIRouter(prefix="/conversations", tags=["assistant"])
 
@@ -123,12 +124,15 @@ async def send_message(
         raise ApiError(503, "config_unavailable", "An active valid configuration is required.")
     provider: AssistantProvider | None = getattr(request.app.state, "assistant_provider", None)
     if provider is None:
-        if not services.environment.openai_api_key:
-            raise ApiError(503, "assistant_unavailable", "OpenAI credentials are not configured.")
-        provider = OpenAIResponsesProvider(
-            api_key=services.environment.openai_api_key,
-            model=config.llm.model,
-        )
+        try:
+            provider = ProviderRegistry(services.credentials).assistant(
+                config.llm.resolved_assistant_provider,
+                config.llm.resolved_assistant_model,
+            )
+        except ProviderCredentialError as error:
+            raise ApiError(
+                503, "assistant_unavailable", "Assistant credentials are not configured."
+            ) from error
     try:
         conversation_detail(services.sessions, conversation_id)
     except ConversationNotFoundError as error:
@@ -143,7 +147,7 @@ async def send_message(
                 conversation_id=conversation_id,
                 user_text=body.content,
                 provider=provider,
-                model=config.llm.model,
+                model=config.llm.resolved_assistant_model,
             ):
                 yield f"event: {delta.event}\ndata: {json.dumps(delta.data)}\n\n"
         except AssistantTurnError:

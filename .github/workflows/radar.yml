@@ -20,6 +20,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      WAFER_API_KEY: ${{ secrets.WAFER_API_KEY }}
       RADAR_CONFIG: config/profile.example.yaml
       RADAR_DATABASE_URL: sqlite:///data/radar.sqlite
     steps:

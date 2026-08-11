@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from radar import __version__
 from radar.api.dependencies import Services
+from radar.llm.secrets import ProviderName, SecretStoreUnavailableError
 
 router = APIRouter(tags=["system"])
 
@@ -80,9 +81,12 @@ def readiness(response: Response, services: Services) -> ReadinessResponse:
         checks=checks,
         secrets={
             "github_token": SecretStatus(status=_secret_status(services.environment.github_token)),
-            "openai_api_key": SecretStatus(
-                status=_secret_status(services.environment.openai_api_key)
-            ),
+            **{
+                f"{provider}_api_key": SecretStatus(
+                    status=_provider_secret_status(services, provider)
+                )
+                for provider in ("openai", "anthropic", "google", "wafer")
+            },
         },
     )
 
@@ -93,3 +97,12 @@ def _secret_status(value: str | None) -> Literal["configured", "missing", "inval
     if not value.strip():
         return "invalid"
     return "configured"
+
+
+def _provider_secret_status(
+    services: Services, provider: ProviderName
+) -> Literal["configured", "missing", "invalid"]:
+    try:
+        return _secret_status(services.credentials.resolve(provider).value)
+    except SecretStoreUnavailableError:
+        return "invalid"

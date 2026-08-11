@@ -18,6 +18,7 @@ from radar.config_store import SqlAlchemyConfigurationStore
 from radar.db.models import PipelineRun, RunEvent
 from radar.github.client import GitHubClient
 from radar.github.rest import GitHubRestTransport
+from radar.llm.registry import ProviderCredentialError, ProviderRegistry
 from radar.pipeline.background import BackgroundRunConflictError, BackgroundRunCoordinator
 from radar.pipeline.orchestrator import run_pipeline
 
@@ -57,6 +58,14 @@ async def start_run(
     if not services.environment.github_token:
         raise ApiError(503, "github_unavailable", "GitHub credentials are not configured.")
     coordinator: BackgroundRunCoordinator = request.app.state.run_coordinator
+    analysis_provider = None
+    if not body.fallback_only:
+        try:
+            analysis_provider = ProviderRegistry(services.credentials).analysis(
+                config.llm.provider, config.llm.model
+            )
+        except ProviderCredentialError:
+            analysis_provider = None
     try:
         run_id = coordinator.reserve(
             config.config_hash,
@@ -80,7 +89,7 @@ async def start_run(
                 GitHubClient(transport),
                 services.sessions,
                 services.clock,
-                api_key=services.environment.openai_api_key,
+                provider=analysis_provider,
                 fallback_only=body.fallback_only,
                 deadline_seconds=body.deadline_seconds,
                 reserved_run_id=run_id,
@@ -148,14 +157,9 @@ async def stream_run_events(
 
 
 def _sanitize(value: object, services: Services) -> object:
-    secrets = {
-        item
-        for item in (
-            services.environment.github_token,
-            services.environment.openai_api_key,
-        )
-        if item
-    }
+    secrets = set(services.credentials.values_for_redaction())
+    if services.environment.github_token:
+        secrets.add(services.environment.github_token)
     if isinstance(value, dict):
         return {key: _sanitize(child, services) for key, child in value.items()}
     if isinstance(value, list):

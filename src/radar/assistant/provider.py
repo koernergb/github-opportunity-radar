@@ -28,6 +28,12 @@ ProviderEvent = ProviderTextDelta | ProviderToolCall | ProviderCompleted
 
 
 class AssistantProvider(Protocol):
+    @property
+    def provider_name(self) -> str: ...
+
+    @property
+    def model_version(self) -> str: ...
+
     def stream(
         self,
         *,
@@ -43,6 +49,10 @@ class OpenAIResponsesProvider:
     def __init__(self, *, api_key: str, model: str) -> None:
         self._client = AsyncOpenAI(api_key=api_key)
         self._model = model
+
+    @property
+    def model_version(self) -> str:
+        return self._model
 
     async def stream(
         self,
@@ -76,3 +86,5 @@ class OpenAIResponsesProvider:
                 response = event.response
                 usage = response.usage.model_dump(mode="json") if response.usage else {}
                 yield ProviderCompleted(usage=usage)
+
+    provider_name = "openai"

@@ -96,10 +96,36 @@ class GitHubSettings(StrictModel):
 class LLMSettings(StrictModel):
     """Bounded semantic-analysis provider controls."""
 
-    provider: Literal["openai"] = "openai"
+    provider: Literal["openai", "anthropic", "google", "wafer"] = "openai"
     model: str
+    assistant_provider: Literal["openai", "anthropic", "google", "wafer"] | None = None
+    assistant_model: str | None = None
     max_candidates_per_run: PositiveInt = 30
     max_input_characters: Annotated[int, Field(ge=1000, le=1_000_000)] = 60_000
+
+    @field_validator("model")
+    @classmethod
+    def model_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("model must not be blank")
+        return value.strip()
+
+    @field_validator("assistant_model")
+    @classmethod
+    def assistant_model_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("assistant_model must not be blank")
+        return value.strip() if value is not None else None
+
+    @property
+    def resolved_assistant_provider(
+        self,
+    ) -> Literal["openai", "anthropic", "google", "wafer"]:
+        return self.assistant_provider or self.provider
+
+    @property
+    def resolved_assistant_model(self) -> str:
+        return self.assistant_model or self.model
 
 
 class RepositorySettings(StrictModel):
@@ -151,7 +177,14 @@ class RadarConfig(StrictModel):
     @property
     def config_hash(self) -> str:
         """Stable SHA-256 of the full validated configuration."""
-        return canonical_hash(self.model_dump(mode="json"))
+        payload = self.model_dump(mode="json")
+        llm = payload["llm"]
+        if isinstance(llm, dict):
+            if llm.get("assistant_provider") is None:
+                llm.pop("assistant_provider", None)
+            if llm.get("assistant_model") is None:
+                llm.pop("assistant_model", None)
+        return canonical_hash(payload)
 
     @property
     def profile_hash(self) -> str:
@@ -170,6 +203,9 @@ class EnvironmentSettings(BaseSettings):
 
     github_token: str | None = None
     openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    google_api_key: str | None = None
+    wafer_api_key: str | None = None
     radar_config: Path = Path("config/profile.yaml")
     radar_database_url: str = "sqlite:///data/radar.sqlite"
     radar_web_host: str = "127.0.0.1"

@@ -55,6 +55,9 @@ github:
 llm:
   provider: openai
   model: gpt-5-mini
+  # Optional independent chat selection; omit both to reuse provider/model above.
+  # assistant_provider: anthropic
+  # assistant_model: your-anthropic-model
   max_candidates_per_run: 30
   max_input_characters: 60000
 

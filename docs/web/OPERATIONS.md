@@ -15,7 +15,8 @@ Times are stored in UTC and displayed in the configured IANA timezone.
 ## Recovery and troubleshooting
 
 - `Radar is offline`: run `uv run radar doctor`, then inspect `/api/v1/readiness`.
-- Assistant unavailable: set `OPENAI_API_KEY`; ranking and all non-chat pages still work.
+- Assistant unavailable: configure the selected OpenAI, Anthropic, Google, or Wafer key in
+  Settings or its environment variable; ranking and all non-chat pages still work.
 - GitHub unavailable: set a read-only `GITHUB_TOKEN`. Radar never writes to GitHub.
 - Schedule says `credentials_unavailable`: configure GitHub credentials and wait for the
   next due time, or run manually.

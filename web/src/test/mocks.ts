@@ -4,7 +4,7 @@ import { setupServer } from "msw/node";
 import { opportunityFixture } from "./fixtures";
 
 const revision = { revision_id: "00000000-0000-0000-0000-000000000010", valid: true, config_hash: "abcdef123456", profile_hash: "123456abcdef", source: "manual", summary: "Active profile", created_at: "2026-08-08T12:00:00Z", activated_at: "2026-08-08T12:00:00Z", supersedes_id: null, validation_errors: [] };
-const config = { version: 1, user: { timezone: "America/Detroit", max_estimated_hours: 12, interests: ["performance"], career_targets: ["ML systems"] }, scoring: { payoff_weights: { career_relevance: .22, technical_depth: .18, project_impact: .17, portfolio_explainability: .15, learning_value: .12, visibility: .08, timeliness: .08 } }, repositories: [{ full_name: "ml-explore/mlx", enabled: true }] };
+const config = { version: 1, user: { timezone: "America/Detroit", max_estimated_hours: 12, interests: ["performance"], career_targets: ["ML systems"] }, scoring: { payoff_weights: { career_relevance: .22, technical_depth: .18, project_impact: .17, portfolio_explainability: .15, learning_value: .12, visibility: .08, timeliness: .08 } }, llm: { provider: "openai", model: "gpt-5-mini", max_candidates_per_run: 30, max_input_characters: 60000 }, repositories: [{ full_name: "ml-explore/mlx", enabled: true }] };
 
 export const handlers = [
   http.get("/api/v1/conversations", () => HttpResponse.json([{ conversation_id: "00000000-0000-0000-0000-000000000050", title: "Best performance work", created_at: "2026-08-08T12:00:00Z", updated_at: "2026-08-08T12:00:00Z", message_count: 2 }])),
@@ -45,6 +45,15 @@ export const handlers = [
       secrets: { github_token: { status: "configured" }, openai_api_key: { status: "missing" } },
     }),
   ),
+  http.get("/api/v1/llm/providers", () => HttpResponse.json([
+    { provider: "openai", display_name: "OpenAI", credential_status: "configured", credential_source: "environment", structured_analysis: true, assistant_tools: true, model_suggestions: ["gpt-5-mini"], notes: null, selected_for_analysis: true, selected_for_assistant: true, analysis_model: "gpt-5-mini", assistant_model: "gpt-5-mini" },
+    { provider: "anthropic", display_name: "Anthropic", credential_status: "missing", credential_source: null, structured_analysis: true, assistant_tools: true, model_suggestions: [], notes: null, selected_for_analysis: false, selected_for_assistant: false, analysis_model: null, assistant_model: null },
+    { provider: "google", display_name: "Google Gemini", credential_status: "missing", credential_source: null, structured_analysis: true, assistant_tools: true, model_suggestions: [], notes: null, selected_for_analysis: false, selected_for_assistant: false, analysis_model: null, assistant_model: null },
+    { provider: "wafer", display_name: "Wafer", credential_status: "missing", credential_source: null, structured_analysis: true, assistant_tools: true, model_suggestions: ["GLM-5.2"], notes: "Tool support varies by model.", selected_for_analysis: false, selected_for_assistant: false, analysis_model: null, assistant_model: null },
+  ])),
+  http.put("/api/v1/llm/providers/:provider/credential", ({ params }) => HttpResponse.json({ provider: params.provider, status: "configured", source: "keychain" })),
+  http.delete("/api/v1/llm/providers/:provider/credential", ({ params }) => HttpResponse.json({ provider: params.provider, status: "removed", source: null })),
+  http.post("/api/v1/llm/providers/:provider/test", ({ params }) => HttpResponse.json({ provider: params.provider, status: "connected", source: "keychain" })),
 ];
 
 export const server = setupServer(...handlers);

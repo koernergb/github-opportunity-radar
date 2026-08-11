@@ -33,6 +33,29 @@ export async function putJson<T>(path: string, body: unknown, schema: ZodType<T>
   return schema.parse(await response.json());
 }
 
+export async function putSecret<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T> {
+  const response = await fetch(`/api/v1${path}`, {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Radar-Secret-Intent": "update-provider-credential",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new ApiClientError("Radar could not update this credential.", response.status);
+  return schema.parse(await response.json());
+}
+
+export async function deleteSecret<T>(path: string, schema: ZodType<T>): Promise<T> {
+  const response = await fetch(`/api/v1${path}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json", "X-Radar-Secret-Intent": "update-provider-credential" },
+  });
+  if (!response.ok) throw new ApiClientError("Radar could not remove this credential.", response.status);
+  return schema.parse(await response.json());
+}
+
 export async function getText(path: string): Promise<string> {
   const response = await fetch(`/api/v1${path}`, { headers: { Accept: "application/yaml" } });
   if (!response.ok) throw new ApiClientError("Radar could not export this data.", response.status);

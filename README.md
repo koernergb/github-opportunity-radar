@@ -49,13 +49,16 @@ Open `http://127.0.0.1:8000`. Deep links are served by the production build. For
 two-process development session, run `pnpm dev` in `web/` and `uv run radar web` at the
 repository root. The empty-database walkthrough is a safe fixture demo: it exercises Home,
 Settings, configuration, and run-history empty states without contacting GitHub. Live sync
-requires `GITHUB_TOKEN`; assistant chat requires `OPENAI_API_KEY`.
+requires `GITHUB_TOKEN`; assistant chat requires a key for its selected provider.
 
 See [web operations](docs/web/OPERATIONS.md) for scheduling, state recovery,
 troubleshooting, and the release checklist.
 
-`OPENAI_API_KEY` is optional. Without it, analysis uses conservative, deterministic
-fallback features with low confidence. The full quality gate is:
+Provider API keys are optional. OpenAI, Anthropic, Google Gemini, and Wafer are supported.
+Keys may be supplied through environment variables or saved from local Settings into the
+operating-system credential vault. Without the selected analysis provider's key, analysis
+uses conservative, deterministic fallback features with low confidence. See the
+[multi-provider plan](docs/LLM_PROVIDERS_PLAN.md). The full quality gate is:
 
 ```bash
 uv run ruff check .
@@ -70,7 +73,8 @@ All environment variables are listed in [.env.example](.env.example):
 
 - `GITHUB_TOKEN`: required only for live GitHub commands (`doctor --github`, `sync`,
   `repos sync`, and `run`). Grant only the access needed to read selected repositories.
-- `OPENAI_API_KEY`: optional for structured semantic analysis; never stored in SQLite.
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `WAFER_API_KEY`: optional
+  credentials for the selected analysis/assistant providers; never stored in SQLite.
 - `RADAR_CONFIG`: YAML profile path; defaults to `config/profile.yaml`.
 - `RADAR_DATABASE_URL`: SQLAlchemy database URL; defaults to local SQLite at
   `data/radar.sqlite`.
